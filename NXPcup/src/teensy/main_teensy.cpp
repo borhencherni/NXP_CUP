@@ -30,19 +30,19 @@ Servo servo;
 #define MIN_VECTOR_LEN    15.0f    // ignore very short noise vectors
 #define MIN_VECTOR_ANGLE  5.0f     // ignore near-horizontal vectors (deg)
 
-// Low-pass filter alpha ( was hard-coded 0.3/0.7)
-// Higher α = more responsive, lower α = smoother
+// Low-pass filter alpha 
 #define LPF_ALPHA 0.7f
 
 
 float filteredSteering  = 0.0f;
-float integralError     = 0.0f;     // UPDATE 1: PID integral term
-float lastError         = 0.0f;     // UPDATE 1: PID derivative term
+float integralError     = 0.0f;     //  PID integral term
+float lastError         = 0.0f;     //  PID derivative term
 float lastSteeringAngle = SERVO_CENTER;
 
 
 void setup() {
   Serial.begin(115200);
+  Serial3.begin(115200);
   pixy.init();
   pixy.changeProg("line");
   pixy.setLamp(1, 1);
@@ -50,7 +50,22 @@ void setup() {
   servo.write(SERVO_CENTER);
 
 }
+void sendDataToESP(float vx, float vy, float steeringangle, float servoangle)
+{
+  Serial3.print("D,");   
+  Serial3.print(vx,4);
+  Serial3.print(",");
 
+  Serial3.print(vy,4);
+  Serial3.print(",");
+
+  Serial3.print(steeringangle,2);
+  Serial3.print(",");
+
+  Serial3.print(servoangle,2);
+
+  Serial3.println();   
+}
 void normalizeVectors()
 {
   for(int i=0;i<pixy.line.numVectors;i++)
@@ -180,6 +195,7 @@ void loop() {
   filteredSteering = LPF_ALPHA * filteredSteering + (1.0f - LPF_ALPHA) * steering;
   float servoAngle = 90 + filteredSteering;
   servoAngle = constrain(servoAngle, SERVO_MIN, SERVO_MAX);
+  sendDataToESP(vx, vy, filteredSteering, servoAngle);
   servo.write(servoAngle);
   Serial.print("Steering angle: ");
   Serial.print(filteredSteering);
