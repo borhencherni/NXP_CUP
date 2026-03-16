@@ -1,37 +1,12 @@
 #include <Arduino.h>
 #include <Servo.h>
 #include <Pixy2.h>
-#define IN1 23
-#define IN2 22
-#define IN3 21
-#define IN4 20
-#define TXESP 15
-#define RXESP 14
+#include "Config.h"
+#include "LineDetector.h"
+
+
 Pixy2 pixy;
 Servo servo;
-// Aspect ratio correction: Pixy2 pixels are not square
-// frameWidth=78, frameHeight=51 → real ratio ≈ 1.53
-//frameWidth  = 78 pixels   →  covers the full horizontal FOV
-//frameHeight = 51 pixels   →  covers the full vertical FOV
-//ratio = frameWidth / frameHeight = 78 / 51 ≈ 1.53
-//This means 1 pixel of height = 1.53 pixels of width in real-world distance.
-#define SCALE_Y(y)        ((y) * 1.53f)
-#define KP                0.80f
-#define KI                0.0f    
-#define KD                0.0f 
-#define SERVO_CENTER      90
-#define SERVO_MIN         70       
-#define SERVO_MAX         110  
-#define I_MAX             15.0f   // Integral windup clamp
-// Lookahead 
-#define L_MIN             0.4f     // short lookahead in tight turns (reactive)
-#define L_MAX             0.9f     // long lookahead on straights (smooth)
-// Vector filtering
-#define MIN_VECTOR_LEN    15.0f    // ignore very short noise vectors
-#define MIN_VECTOR_ANGLE  5.0f     // ignore near-horizontal vectors (deg)
-
-// Low-pass filter alpha 
-#define LPF_ALPHA 0.7f
 
 
 float filteredSteering  = 0.0f;
@@ -50,7 +25,7 @@ void setup() {
   servo.write(SERVO_CENTER);
 
 }
-void sendDataToESP(float vx, float vy, float steeringangle, float servoangle)
+/*void sendDataToESP(float vx, float vy, float steeringangle, float servoangle)
 {
   Serial3.print("D,");   
   Serial3.print(vx,4);
@@ -152,6 +127,7 @@ void lookaheadPoint(float vx, float vy, float& px, float& py) {
     px = pixy.frameWidth  / 2.0f + vx * L * pixy.frameWidth;
     py = pixy.frameHeight        + vy * L * pixy.frameHeight;
 }
+
 float computeSteering(float px, float dt) {
     float error = px - pixy.frameWidth / 2.0f;
 
@@ -167,10 +143,11 @@ float computeSteering(float px, float dt) {
     // Convert total PID output (pixels) → degrees via atan2 (same as original)
     float output = p + i + d;
     return atan2f(output, 40.0f) * 180.0f / PI;
-}
+}*/
 static unsigned long lastTime = 0;
 
 void loop() {
+  
   unsigned long now = millis();
   float dt = (now - lastTime) / 1000.0f;
   if (dt <= 0.0f || dt > 0.5f) dt = 0.02f;  
@@ -184,11 +161,19 @@ void loop() {
     Serial.println("No line detected");
     return;
   }
-  normalizeVectors();
   float vx, vy;
-  fusedVector(vx, vy);
-  normalizeFusedVector(vx, vy);
-  float px, py;
+  LineDetector detLine = LineDetector(pixy);
+  if(detLine.update()) {
+    detLine.getFusedVector(vx, vy);
+  } else {
+    vx = 0.0f;
+    vy = 0.0f;
+  };
+  
+  
+  
+  /*normalizeFusedVector(vx, vy);
+  /*float px, py;
   lookaheadPoint(vx, vy, px, py);
   float steering = computeSteering(px, dt); 
   steering = constrain(steering, -20.0f, 20.0f); 
