@@ -12,6 +12,7 @@ bool LineDetector::update() {
      normalizeVectors();
      computeFusedVector();
      normalizeFusedVector();
+     if (_vx == 0.0f && _vy == 0.0f) return false;
      return true;
 }
 
@@ -43,7 +44,7 @@ float LineDetector::VecLength(float x1, float y1, float x2, float y2) const {
 
 float LineDetector::VecAngle (float x1, float y1, float x2, float y2) const {
      float dx = x2 - x1;
-     float dy = SCALE_Y(y2) - SCALE_Y(y1 - y1);
+     float dy = SCALE_Y(y2) - SCALE_Y(y1);
      return atan2f(dy, dx) * 180.0f / PI;
 }
 

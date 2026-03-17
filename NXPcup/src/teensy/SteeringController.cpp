@@ -16,7 +16,7 @@ float SteeringController::compute(float vx, float vy, float dt) {
     // Low-pass filter to smooth out rapid servo jitter
     _filteredSteering = LPF_ALPHA * _filteredSteering + (1.0f - LPF_ALPHA) * raw;
 
-    return _filteredSteering;
+    return constrain(_filteredSteering, -20.0f, 20.0f);
 }
 
 void SteeringController::reset() {
@@ -61,5 +61,5 @@ float SteeringController::computePID(float px, float dt) {
     _lastError = error;
 
     float output = p + i + d;
-    return atan2f(output, 40.0f) * 180.0f / PI;
+    return atan2f(output, STEERING_PIXEL_SCALE) * 180.0f / PI;
 }

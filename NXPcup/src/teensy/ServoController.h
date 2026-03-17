@@ -1,5 +1,5 @@
 #pragma once
-
+#include <Arduino.h>
 #include <Servo.h>
 #include "Config.h"
 

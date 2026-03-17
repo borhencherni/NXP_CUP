@@ -47,11 +47,18 @@
 #define LPF_ALPHA 0.7f
 
 //SPEED PID GAINS 
-#define KP                0.80f
-#define KI                0.0f    
-#define KD                0.0f 
-#define I_MAX             15.0f   // Integral windup clamp
+#define KP_S                0.80f
+#define KI_S                0.0f    
+#define KD_S                0.0f 
+#define I_MAX_S             15.0f   // Integral windup clamp
 
+//nombre de ticks pour une rotation complète
+#define nb_t_p_rot 22
+
+#define SPEED_PERIOD_MS 100  // 100ms = 10Hz control loop
+
+
+#define STEERING_PIXEL_SCALE  40.0f //imaginary triangle constant in steering PID
 
 
 
