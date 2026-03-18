@@ -1,10 +1,12 @@
 #pragma once
 
 //define pins
-#define IN1 23
-#define IN2 22
+#define IN1 22
+#define IN2 23
 #define IN3 14
 #define IN4 15
+
+#define LED_PIN 16
 
 #define Servo_PIN 19
 #define Channel_A_LEFT 2
@@ -23,8 +25,8 @@
 
 
 // Vector filtering
-#define MIN_VECTOR_LEN    15.0f    // ignore very short noise vectors
-#define MIN_VECTOR_ANGLE  5.0f     // ignore near-horizontal vectors (deg)
+#define MIN_VECTOR_LEN    7.0f    // ignore very short noise vectors
+#define MIN_VECTOR_ANGLE  2.0f     // ignore near-horizontal vectors (deg)
 
 
 // Lookahead 
@@ -32,15 +34,15 @@
 #define L_MAX             0.9f     // long lookahead on straights (smooth)
 
 //STEERING PID GAINS 
-#define KP                0.80f
+#define KP                2.0f
 #define KI                0.0f    
 #define KD                0.0f 
 #define I_MAX             15.0f   // Integral windup clamp
 
 // servo variables
 #define SERVO_CENTER      90
-#define SERVO_MIN         70       
-#define SERVO_MAX         110  
+#define SERVO_MIN         40       
+#define SERVO_MAX         120  
 
 // Low-pass filter alpha 
 #define LPF_ALPHA 0.7f

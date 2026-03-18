@@ -37,6 +37,7 @@ void setup() {
     pinMode(Channel_B_LEFT, INPUT_PULLUP);
     pinMode(Channel_A_RIGHT, INPUT_PULLUP);
     pinMode(Channel_A_LEFT, INPUT_PULLUP);
+    pinMode(LED_PIN, OUTPUT);
     attachInterrupt(Channel_A_RIGHT, ISR_Right, CHANGE);
     attachInterrupt(Channel_A_LEFT, ISR_Left, CHANGE);
     
@@ -50,7 +51,7 @@ void setup() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 void loop() {
-    pixy.setLamp(1, 1);
+    
     // ── Timing ────────────────────────────────────────────────────────────────
     unsigned long now = millis();
     float dt = (now - lastTime) / 1000.0f;
@@ -61,7 +62,8 @@ void loop() {
     if (!lineDetector.update()) {
         servoCtrl.center();
         steering.reset();
-        speedCtrl.setSpeed(0, 0);
+        speedCtrl.runMotors(0, 0);
+        digitalWrite(LED_PIN, HIGH);
         Serial.println("No line detected");
         return;
     }
@@ -74,9 +76,9 @@ void loop() {
     float servoAngle    = servoCtrl.Steer(steeringAngle + SERVO_CENTER);
 
     // ── Speed Control ────────────────────────────────────────────────────────
-   float steerRatio = steeringAngle / 20.0f; // normalize to [-1, 1]
+   /*float steerRatio = steeringAngle / 20.0f; // normalize to [-1, 1]
    int left_speed = constrain(150 * (1 - steerRatio), 0, 150);
    int right_speed = constrain(150 * (1 + steerRatio), 0, 150);
-   speedCtrl.setSpeed(left_speed, right_speed);
+   speedCtrl.setSpeed(left_speed, right_speed);*/
    speedCtrl.runMotors(150, 150);
 }
