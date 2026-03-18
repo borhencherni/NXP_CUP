@@ -15,18 +15,18 @@ Servo servo;
 //ratio = frameWidth / frameHeight = 78 / 51 ≈ 1.53
 //This means 1 pixel of height = 1.53 pixels of width in real-world distance.
 #define SCALE_Y(y)        ((y) * 1.53f)
-#define KP                0.80f
+#define KP                2.0f
 #define KI                0.0f    
 #define KD                0.0f 
 #define SERVO_CENTER      90
-#define SERVO_MIN         70       
-#define SERVO_MAX         100  
+#define SERVO_MIN         110       
+#define SERVO_MAX         70  
 #define I_MAX             15.0f   // Integral windup clamp
 // Lookahead 
 #define L_MIN             0.4f     // short lookahead in tight turns (reactive)
 #define L_MAX             0.9f     // long lookahead on straights (smooth)
 // Vector filtering
-#define MIN_VECTOR_LEN    5.0f    // ignore very short noise vectors
+#define MIN_VECTOR_LEN    7.0f    // ignore very short noise vectors
 #define MIN_VECTOR_ANGLE  2.0f     // ignore near-horizontal vectors (deg)
 
 // Low-pass filter alpha 
@@ -46,7 +46,7 @@ void setup() {
   pixy.setLamp(1, 1);
   pixy.changeProg("line");
   servo.attach(19);
-  servo.write(SERVO_CENTER);
+  //servo.write(SERVO_CENTER);
   pinMode(IN1, OUTPUT);
   pinMode(IN2, OUTPUT);
   pinMode(IN3, OUTPUT);
@@ -214,21 +214,10 @@ void loop() {
 
   pixy.line.getAllFeatures();
 
-  if (pixy.line.numVectors == 0)
-  {
-    servo.write(90);
-    Serial.println("No line detected");
-    return;
-  }
   normalizeVectors();
   float vx, vy;
   fusedVector(vx, vy);
-  if(!isfinite(vx) || !isfinite(vy) || (vx == 0 && vy == 0))
-{
-    Serial.println("Invalid fused vector");
-    servo.write(SERVO_CENTER);
-    return;
-}
+  
   normalizeFusedVector(vx, vy);
   Serial.print("Fused vector: vx="); 
   Serial.print(vx); 
@@ -242,16 +231,16 @@ void loop() {
   steering = constrain(steering, -20.0f, 20.0f); 
   filteredSteering = LPF_ALPHA * filteredSteering + (1.0f - LPF_ALPHA) * steering;
   float servoAngle = 90 + filteredSteering;
-  servoAngle = constrain(servoAngle, SERVO_MIN, SERVO_MAX);
+  servoAngle = constrain(servoAngle, 70, 120);
   servo.write(servoAngle);
   runMotors(MOTOR_SPEED, MOTOR_SPEED);
   //sendDataToESP(vx, vy, filteredSteering, servoAngle);
-  servo.write(servoAngle);
+  //servo.write(servoAngle);
   Serial.print("Steering angle: ");
   Serial.print(filteredSteering);
   Serial.print("  Servo angle: ");
   Serial.println(servoAngle);
-  
+  delay(100);
   /*pixy.line.getAllFeatures();
 
   if (pixy.line.numVectors == 0)
