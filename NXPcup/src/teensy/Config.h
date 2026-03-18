@@ -41,7 +41,7 @@
 
 // servo variables
 #define SERVO_CENTER      90
-#define SERVO_MIN         40       
+#define SERVO_MIN         60       
 #define SERVO_MAX         120  
 
 // Low-pass filter alpha 

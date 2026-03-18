@@ -1,4 +1,5 @@
 #include "LineDetector.h"
+#include "teensy/Config.h"
 
 
 
@@ -8,6 +9,9 @@ LineDetector::LineDetector(Pixy2& pixy) : _pixy(pixy) {}
 
 bool LineDetector::update() {
      _pixy.line.getAllFeatures();
+      Serial.print("numVectors: ");
+      Serial.println(_pixy.line.numVectors); 
+      delay(700);
      if (_pixy.line.numVectors == 0) return false;
      normalizeVectors();
      computeFusedVector();
@@ -38,7 +42,7 @@ void LineDetector::normalizeVectors() {//negulbou les vecteurs elli nalguouhom m
 
 
 float LineDetector::VecLength(float x1, float y1, float x2, float y2) const {
-     return sqrt((x2 - x1) * (x2 - x1) + (SCALE_Y(y2 - y1) * SCALE_Y(y2 - y1)));
+     return sqrt((x2 - x1) * (x2 - x1) + ((SCALE_Y(y2) - SCALE_Y(y1)) * (SCALE_Y(y2) - SCALE_Y(y1))));
 }
 
 

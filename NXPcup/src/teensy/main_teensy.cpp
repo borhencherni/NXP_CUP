@@ -43,8 +43,9 @@ void setup() {
     
 
     pixy.init();
-    pixy.changeProg("line");
     pixy.setLamp(1, 1);
+    pixy.changeProg("line");
+    
 
     servoCtrl.init();   // attaches servo and moves to centre
 }
@@ -62,12 +63,12 @@ void loop() {
     if (!lineDetector.update()) {
         servoCtrl.center();
         steering.reset();
-        speedCtrl.runMotors(0, 0);
+        speedCtrl.runMotors(80, 80);
         digitalWrite(LED_PIN, HIGH);
-        Serial.println("No line detected");
+        //Serial.println("No line detected");
         return;
     }
-
+    digitalWrite(LED_PIN, LOW);
     float vx, vy;
     lineDetector.getFusedVector(vx, vy);
 
@@ -80,5 +81,5 @@ void loop() {
    int left_speed = constrain(150 * (1 - steerRatio), 0, 150);
    int right_speed = constrain(150 * (1 + steerRatio), 0, 150);
    speedCtrl.setSpeed(left_speed, right_speed);*/
-   speedCtrl.runMotors(150, 150);
+   speedCtrl.runMotors(100, 100);
 }
