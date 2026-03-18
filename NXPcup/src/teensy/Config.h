@@ -3,10 +3,9 @@
 //define pins
 #define IN1 23
 #define IN2 22
-#define IN3 21
-#define IN4 20
-#define TXESP 15
-#define RXESP 14
+#define IN3 14
+#define IN4 15
+
 #define Servo_PIN 19
 #define Channel_A_LEFT 2
 #define Channel_B_LEFT 3

@@ -50,6 +50,7 @@ void setup() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 void loop() {
+    pixy.setLamp(1, 1);
     // ── Timing ────────────────────────────────────────────────────────────────
     unsigned long now = millis();
     float dt = (now - lastTime) / 1000.0f;
@@ -77,4 +78,5 @@ void loop() {
    int left_speed = constrain(150 * (1 - steerRatio), 0, 150);
    int right_speed = constrain(150 * (1 + steerRatio), 0, 150);
    speedCtrl.setSpeed(left_speed, right_speed);
+   speedCtrl.runMotors(150, 150);
 }

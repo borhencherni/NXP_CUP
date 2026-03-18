@@ -11,11 +11,12 @@ class SpeedControl{
         int inc_ticks_right(){return _ticks_right++;};
         int dec_ticks_left(){return _ticks_left--;};
         int dec_ticks_right(){return _ticks_right--;};
+        void runMotors(int left_PWM, int right_PWM);
 
     private:
         void compute_current_speed(float dt);
         float compute_PID_speed(float current_speed, float target_speed,float& IntegralError, float& lastError, float dt);
-        void runMotors(int left_PWM, int right_PWM);
+        
 
         unsigned long _previous_time = 0;
         int _nb_ticks_PR;
