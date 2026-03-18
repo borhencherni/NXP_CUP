@@ -7,15 +7,20 @@ LineDetector::LineDetector(Pixy2& pixy) : _pixy(pixy) {}
 // Public
 
 bool LineDetector::update() {
-     _pixy.line.getAllFeatures();
-     if (_pixy.line.numVectors == 0) return false;
-     normalizeVectors();
+     //_pixy.line.getAllFeatures();
+      _trackInfo = Sensors_Scan(_pixy);
+     if (!_trackInfo.hasRight && !_trackInfo.hasLeft) return false;
+     /*normalizeVectors();
      computeFusedVector();
-     normalizeFusedVector();
-     if (_vx == 0.0f && _vy == 0.0f) return false;
+     normalizeFusedVector();*/
      return true;
+     
 }
 
+
+void LineDetector::getTrackInfo(TrackInfo& trackInfo) const {
+   trackInfo = _trackInfo;
+}
 void LineDetector::getFusedVector(float& vx, float& vy) const {
      vx = _vx;
      vy = _vy;
@@ -96,4 +101,91 @@ void LineDetector::normalizeFusedVector() {// el vecteur elli lguineh ki fusina 
           _vy /= mag;
      }
  
+}
+
+TrackInfo LineDetector::Sensors_Scan(Pixy2& pixy) {
+    TrackInfo info = {false, false, 0, 0, false, false};
+    pixy.line.getAllFeatures();
+    
+    if (pixy.line.numVectors == 0) return info;
+
+    LineVector lefts[10], rights[10], horz[10];
+    
+    int l_idx = 0, r_idx = 0, h_idx=0;
+    int horizontalCount = 0;
+
+    for (int i = 0; i < pixy.line.numVectors; i++) {
+        // Convert Pixy internal struct to our local struct
+        LineVector v;
+        v.x0 = pixy.line.vectors[i].m_x0;
+        v.y0 = pixy.line.vectors[i].m_y0;
+        v.x1 = pixy.line.vectors[i].m_x1;
+        v.y1 = pixy.line.vectors[i].m_y1;
+        
+        float dx = v.x1 - v.x0;
+        float dy = v.y1 - v.y0;
+        v.length = sqrt(dx*dx + dy*dy);
+        v.angle = atan2(abs(dy), abs(dx)) * 180.0 / PI;
+
+        // FILTER 1: IGNORE NOISE (Tiny lines)
+        if (v.length < 10) continue;
+
+        // FILTER 2: DETECT INTERSECTION / FINISH (Horizontal Lines)
+        if (v.angle < 20.0) { 
+            
+            horz[h_idx++] = v;
+            continue; // DO NOT use this for steering
+        }
+
+        // CLASSIFY LEFT vs RIGHT
+        // We use the "Bottom" of the vector (y max) as reference
+        int x_ref = (v.y0 > v.y1) ? v.x0 : v.x1; 
+
+        if (x_ref < SCREEN_CENTER_X) {
+            if (l_idx < 10) lefts[l_idx++] = v; // Safety Check < 10
+        } else {
+            if (r_idx < 10) rights[r_idx++] = v; // Safety Check < 10
+        }
+    }
+
+    // Sort to find the "Main" lines (longest)
+    sortVectors(lefts, l_idx);
+    sortVectors(rights, r_idx);
+    sortVectors(horz, h_idx);
+
+    if (l_idx > 0) {
+        info.hasLeft = true;
+        // Use the "Head" (Top) of the vector for looking ahead
+        info.leftX = (lefts[0].y1 < lefts[0].y0) ? lefts[0].x1 : lefts[0].x0;
+    }
+    
+    if (r_idx > 0) {
+        info.hasRight = true;
+        info.rightX = (rights[0].y1 < rights[0].y0) ? rights[0].x1 : rights[0].x0;
+    }
+
+    // LOGIC: Finish Line = Multiple Horizontal Lines
+    if (h_idx>= 2)  {
+          if (info.hasLeft && info.hasRight && h_idx == 2){
+            if ((horz[0].x0 < info.rightX) && (horz[0].x1 < info.rightX)&&(horz[0].x0 > info.leftX) && (horz[0].x1 > info.leftX)  ){
+                  if ((horz[1].x0 < info.rightX) && (horz[1].x1 < info.rightX)&&(horz[1].x0 > info.leftX) && (horz[1].x1 > info.leftX)){
+                                         info.isFinish = true;}}
+            else info.isCrossing = true;}
+          else if(h_idx> 2)   {info.isCrossing = true;}
+                                          }
+     return info;
+}
+
+
+
+void LineDetector::sortVectors(LineVector arr[], int count) {
+    for (int i = 0; i < count - 1; i++) {
+        for (int j = 0; j < count - i - 1; j++) {
+            if (arr[j].length < arr[j + 1].length) {
+                LineVector temp = arr[j];
+                arr[j] = arr[j + 1];
+                arr[j + 1] = temp;
+            }
+        }
+    }
 }

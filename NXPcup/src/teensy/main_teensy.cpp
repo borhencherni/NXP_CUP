@@ -10,7 +10,7 @@
 
 // ─── Hardware objects ─────────────────────────────────────────────────────────
 static Pixy2 pixy;
-
+TrackInfo trackInfo;
 // ─── Subsystem objects ────────────────────────────────────────────────────────
 static LineDetector      lineDetector(pixy);
 static SteeringController steering(pixy);
@@ -60,19 +60,23 @@ void loop() {
 
     // ── Line Detection ────────────────────────────────────────────────────────
     if (!lineDetector.update()) {
-        servoCtrl.center();
-        steering.reset();
-        speedCtrl.runMotors(0, 0);
+        //servoCtrl.center();
+        //steering.reset();
+        lineDetector.getTrackInfo(trackInfo);
+    // ── Steering ──────────────────────────────────────────────────────────────
+        float steeringAngle = steering.compute(trackInfo, dt);
+        float servoAngle    = servoCtrl.Steer(steeringAngle + SERVO_CENTER);
+        speedCtrl.runMotors(80, 80);
         digitalWrite(LED_PIN, HIGH);
         Serial.println("No line detected");
         return;
     }
 
-    float vx, vy;
-    lineDetector.getFusedVector(vx, vy);
-
+    
+    //lineDetector.getFusedVector(vx, vy);
+     lineDetector.getTrackInfo(trackInfo);
     // ── Steering ──────────────────────────────────────────────────────────────
-    float steeringAngle = steering.compute(vx, vy, dt);
+    float steeringAngle = steering.compute(trackInfo, dt);
     float servoAngle    = servoCtrl.Steer(steeringAngle + SERVO_CENTER);
 
     // ── Speed Control ────────────────────────────────────────────────────────
@@ -80,5 +84,5 @@ void loop() {
    int left_speed = constrain(150 * (1 - steerRatio), 0, 150);
    int right_speed = constrain(150 * (1 + steerRatio), 0, 150);
    speedCtrl.setSpeed(left_speed, right_speed);*/
-   speedCtrl.runMotors(150, 150);
+   speedCtrl.runMotors(100, 100);
 }

@@ -2,6 +2,7 @@
 
 #include <Pixy2.h> 
 #include "Config.h"
+#include "LineDetector.h"
 
 
 class SteeringController {
@@ -22,16 +23,18 @@ public:
      - param dt   time since last call (seconds)
      - return     filtered steering angle in degrees (negative = left, positive = right)
      */
-    float compute(float vx, float vy, float dt);
+    float compute(TrackInfo& track, float dt);
     void reset();
 
 private:
     Pixy2& _pixy;
     float _integralError     = 0.0f;     //  PID integral term
     float _lastError         = 0.0f;     //  PID derivative term
-    float _filteredSteering  = 0.0f;    
+    float _filteredSteering  = 0.0f;
+    float _lastcurrentTargetX = 0.0f;    
 
     float adaptiveLookahead(float vx) const;
     void lookaheadPoint(float vx, float vy, float& px, float& py) const;
+    float currentTarget(TrackInfo& track) const;
     float computePID(float px, float dt);
 };

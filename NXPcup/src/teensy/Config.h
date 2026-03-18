@@ -61,6 +61,10 @@
 
 #define STEERING_PIXEL_SCALE  40.0f //imaginary triangle constant in steering PID
 
+#define SCREEN_CENTER_X     39.0
+
+#define TRACK_WIDTH_PX      50 //width of the track in pixels estimation à vérifier
+
 
 
 
