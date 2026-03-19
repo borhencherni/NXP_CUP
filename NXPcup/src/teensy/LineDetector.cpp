@@ -1,4 +1,5 @@
 #include "LineDetector.h"
+#include "usb_serial.h"
 
 
 
@@ -106,7 +107,8 @@ void LineDetector::normalizeFusedVector() {// el vecteur elli lguineh ki fusina 
 TrackInfo LineDetector::Sensors_Scan(Pixy2& pixy) {
     TrackInfo info = {false, false, 0, 0, false, false};
     pixy.line.getAllFeatures();
-    
+    Serial.print("Number of Vectors: ");
+    Serial.println(pixy.line.numVectors);
     if (pixy.line.numVectors == 0) return info;
 
     LineVector lefts[10], rights[10], horz[10];
@@ -131,27 +133,43 @@ TrackInfo LineDetector::Sensors_Scan(Pixy2& pixy) {
         if (v.length < 10) continue;
 
         // FILTER 2: DETECT INTERSECTION / FINISH (Horizontal Lines)
-        if (v.angle < 20.0) { 
+        if (v.angle < 10.0) { 
             
             horz[h_idx++] = v;
             continue; // DO NOT use this for steering
         }
-
+        float intrm;
+        if(v.y0<v.y1){
+                intrm = v.x0;
+                v.x0 = v.x1;
+                v.x1 = intrm;
+                intrm = v.y0;
+                v.y0 = v.y1;
+                v.y1 = intrm;
+        }
+        
         // CLASSIFY LEFT vs RIGHT
         // We use the "Bottom" of the vector (y max) as reference
         int x_ref = (v.y0 > v.y1) ? v.x0 : v.x1; 
 
-        if (x_ref < SCREEN_CENTER_X) {
+        if (x_ref < (pixy.frameWidth / 2)) {
             if (l_idx < 10) lefts[l_idx++] = v; // Safety Check < 10
         } else {
             if (r_idx < 10) rights[r_idx++] = v; // Safety Check < 10
         }
     }
-
-    // Sort to find the "Main" lines (longest)
     sortVectors(lefts, l_idx);
     sortVectors(rights, r_idx);
     sortVectors(horz, h_idx);
+
+    // Sort to find the "Main" lines (longest)
+    if(lefts[0].x0>((pixy.frameWidth/2)-82)){
+         sortLeftVectors(lefts, l_idx);
+    }
+    if(rights[0].x0<((pixy.frameWidth/2)+82)){
+         sortLeftVectors(rights, l_idx);
+    }
+    
 
     if (l_idx > 0) {
         info.hasLeft = true;
@@ -163,20 +181,56 @@ TrackInfo LineDetector::Sensors_Scan(Pixy2& pixy) {
         info.hasRight = true;
         info.rightX = (rights[0].y1 < rights[0].y0) ? rights[0].x1 : rights[0].x0;
     }
+    
+    /*if(_lastHasleft && !info.hasLeft) {while(true){_speedCtrl.runMotors(0, 0);}}
+    if(_lastHasright && !info.hasRight)  {while(true){_speedCtrl.runMotors(0, 0);}}*/
+   /* if(info.hasLeft && info.hasRight){
+        Serial.print("there is Voectors");
+
+    }*/
+    if(info.hasRight && !info.hasLeft) {while(true){_speedCtrl.runMotors(0, 0);}}
 
     // LOGIC: Finish Line = Multiple Horizontal Lines
     if (h_idx>= 2)  {
-          if (info.hasLeft && info.hasRight && h_idx == 2){
-            if ((horz[0].x0 < info.rightX) && (horz[0].x1 < info.rightX)&&(horz[0].x0 > info.leftX) && (horz[0].x1 > info.leftX)  ){
+          info.isCrossing = true;
+            /*if ((horz[0].x0 < info.rightX) && (horz[0].x1 < info.rightX)&&(horz[0].x0 > info.leftX) && (horz[0].x1 > info.leftX)  ){
                   if ((horz[1].x0 < info.rightX) && (horz[1].x1 < info.rightX)&&(horz[1].x0 > info.leftX) && (horz[1].x1 > info.leftX)){
                                          info.isFinish = true;}}
             else info.isCrossing = true;}
-          else if(h_idx> 2)   {info.isCrossing = true;}
-                                          }
+          else if(h_idx> 2)   {info.isCrossing = true;}*/
+                                         }
+     _lastHasleft = info.hasLeft;
+     _lastHasright = info.hasRight;
+     _lastLeftX = info.leftX;
+     _lastRightX = info.rightX;
      return info;
 }
 
 
+
+void LineDetector::sortLeftVectors(LineVector arr[], int count) {
+    for (int i = 0; i < count - 1; i++) {
+        for (int j = 0; j < count - i - 1; j++) {
+            if (arr[j].x1> arr[j + 1].x1) {
+                LineVector temp = arr[j];
+                arr[j] = arr[j + 1];
+                arr[j + 1] = temp;
+            }
+        }
+    }
+}
+
+void LineDetector::sortRightVectors(LineVector arr[], int count) {
+    for (int i = 0; i < count - 1; i++) {
+        for (int j = 0; j < count - i - 1; j++) {
+            if (arr[j].x1 < arr[j + 1].x1) {
+                LineVector temp = arr[j];
+                arr[j] = arr[j + 1];
+                arr[j + 1] = temp;
+            }
+        }
+    }
+}
 
 void LineDetector::sortVectors(LineVector arr[], int count) {
     for (int i = 0; i < count - 1; i++) {

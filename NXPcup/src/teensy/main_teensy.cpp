@@ -43,8 +43,10 @@ void setup() {
     
 
     pixy.init();
-    pixy.changeProg("line");
     pixy.setLamp(1, 1);
+    pixy.changeProg("line");
+    delay(1000);
+    
 
     servoCtrl.init();   // attaches servo and moves to centre
 }
@@ -68,11 +70,16 @@ void loop() {
         float servoAngle    = servoCtrl.Steer(steeringAngle + SERVO_CENTER);
         speedCtrl.runMotors(80, 80);
         digitalWrite(LED_PIN, HIGH);
-        Serial.println("No line detected");
+        //Serial.println("No line detected");
         return;
     }
-
-    
+    digitalWrite(LED_PIN, LOW);
+    if (trackInfo.isCrossing){
+        speedCtrl.runMotors(0, 0);
+        servoCtrl.center();
+        steering.reset();
+        while(true);
+    }
     //lineDetector.getFusedVector(vx, vy);
      lineDetector.getTrackInfo(trackInfo);
     // ── Steering ──────────────────────────────────────────────────────────────

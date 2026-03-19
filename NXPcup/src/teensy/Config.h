@@ -45,7 +45,7 @@
 #define SERVO_MAX         120  
 
 // Low-pass filter alpha 
-#define LPF_ALPHA 0.7f
+#define LPF_ALPHA 0.8f
 
 //SPEED PID GAINS 
 #define KP_S                0.80f
@@ -63,7 +63,7 @@
 
 #define SCREEN_CENTER_X     39.0
 
-#define TRACK_WIDTH_PX      50 //width of the track in pixels estimation à vérifier
+#define TRACK_WIDTH_PX      236 //width of the track in pixels estimation à vérifier
 
 
 

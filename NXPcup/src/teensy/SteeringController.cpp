@@ -23,20 +23,20 @@ float SteeringController::compute(TrackInfo& track, float dt) {
 
 
 float SteeringController::currentTarget(TrackInfo& track) const{
-    float currentTargetX = SCREEN_CENTER_X;
+    float currentTargetX = _pixy.frameWidth / 2.0f;
 
     // 1. Geometric Reconstruction
     if (track.hasLeft && track.hasRight) {
         // Case A: Perfect Vision
-        return currentTargetX = (track.leftX + track.rightX) / 2.0;
+        return currentTargetX = (track.leftX + (track.rightX - 20)) / 2.0;
     } 
     else if (track.hasLeft) {
         // Case B: Right Blind -> Use Left + Fixed Width
-        return currentTargetX = track.leftX + (TRACK_WIDTH_PX / 2.0);
+        return currentTargetX = track.leftX + (TRACK_WIDTH_PX/2.0 );
     } 
     else if (track.hasRight) {
         // Case C: Left Blind -> Use Right - Fixed Width
-         return currentTargetX = track.rightX - (TRACK_WIDTH_PX / 2.0);
+         return currentTargetX = track.rightX - (TRACK_WIDTH_PX/2.0 );
     } 
     else {
         // Case D: Blind -> Memory Mode
