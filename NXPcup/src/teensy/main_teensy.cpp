@@ -3,8 +3,8 @@
 #include <Pixy2.h>
 #define IN1 22
 #define IN2 23
-#define IN3 14
-#define IN4 15
+#define IN3 6
+#define IN4 7
 
 Pixy2 pixy;
 Servo servo;
@@ -15,24 +15,26 @@ Servo servo;
 //ratio = frameWidth / frameHeight = 78 / 51 ≈ 1.53
 //This means 1 pixel of height = 1.53 pixels of width in real-world distance.
 #define SCALE_Y(y)        ((y) * 1.53f)
-#define KP                2.0f
+#define KP                1.0f
 #define KI                0.0f    
 #define KD                0.0f 
 #define SERVO_CENTER      90
-#define SERVO_MIN         110       
-#define SERVO_MAX         70  
+#define SERVO_MIN         60       
+#define SERVO_MAX         130  
 #define I_MAX             15.0f   // Integral windup clamp
 // Lookahead 
 #define L_MIN             0.4f     // short lookahead in tight turns (reactive)
 #define L_MAX             0.9f     // long lookahead on straights (smooth)
 // Vector filtering
-#define MIN_VECTOR_LEN    7.0f    // ignore very short noise vectors
+#define MIN_VECTOR_LEN    10.0f    // ignore very short noise vectors
 #define MIN_VECTOR_ANGLE  2.0f     // ignore near-horizontal vectors (deg)
 
 // Low-pass filter alpha 
-#define LPF_ALPHA 0.7f
+//#define LPF_ALPHA 0.7f
 
-#define MOTOR_SPEED 150
+#define CONTROL_PERIOD_MS 50
+
+#define MOTOR_SPEED 100
 
 float filteredSteering  = 0.0f;
 float integralError     = 0.0f;     //  PID integral term
@@ -45,7 +47,7 @@ void setup() {
   pixy.init();
   pixy.setLamp(1, 1);
   pixy.changeProg("line");
-  servo.attach(19);
+  servo.attach(17);
   //servo.write(SERVO_CENTER);
   pinMode(IN1, OUTPUT);
   pinMode(IN2, OUTPUT);
@@ -54,26 +56,25 @@ void setup() {
 
 }
 
+static void driveMotor(int forwardPin, int reversePin, int speed)
+{
+  speed = constrain(speed, -255, 255);
+
+  if (speed >= 0)
+  {
+    analogWrite(forwardPin, speed);
+    analogWrite(reversePin, 0);
+  }
+  else
+  {
+    analogWrite(forwardPin, 0);
+    analogWrite(reversePin, -speed);
+  }
+}
+
 void runMotors(int LPWM,int RPWM){
-  LPWM = constrain(LPWM, -255, 255);
-  RPWM = constrain(RPWM, -255, 255);
-  if (LPWM > 0){
-    analogWrite(IN1, LPWM);
-    analogWrite(IN2, 0);
-  }
-  else{
-    analogWrite(IN1, 0);
-    analogWrite(IN2, LPWM);
-  }
-  if (RPWM > 0){
-    analogWrite(IN3, RPWM);
-    analogWrite(IN4, 0);
-  }
-  else{
-    analogWrite(IN3, 0);
-    analogWrite(IN4, RPWM);
-  }
-  
+  driveMotor(IN1, IN2, LPWM);
+  driveMotor(IN3, IN4, RPWM);
 }
 
 void sendDataToESP(float vx, float vy, float steeringangle, float servoangle)
@@ -115,7 +116,7 @@ float vectorWeight(int i)
   float dx = pixy.line.vectors[i].m_x1 - pixy.line.vectors[i].m_x0;
   float dy = SCALE_Y(pixy.line.vectors[i].m_y1) - SCALE_Y(pixy.line.vectors[i].m_y0);
 
-  float length = sqrt(dx*dx + dy*dy);
+  float length = sqrtf(dx*dx + dy*dy);
 
   float proximity = pixy.line.vectors[i].m_y0 / (float)pixy.frameHeight;
 
@@ -126,14 +127,14 @@ bool validVector(int i)
   float dx = pixy.line.vectors[i].m_x1 - pixy.line.vectors[i].m_x0;
   float dy = SCALE_Y(pixy.line.vectors[i].m_y1) - SCALE_Y(pixy.line.vectors[i].m_y0);
 
-  float length = sqrt(dx*dx + dy*dy);
+  float length = sqrtf(dx*dx + dy*dy);
 
   if(length < MIN_VECTOR_LEN)
     return false;
 
-  float angle = atan2(dy,dx) * 180 / PI;
+  float angle = atan2f(dy,dx) * 180.0f / PI;
 
-  if(abs(angle) < MIN_VECTOR_ANGLE)
+  if(fabsf(angle) < MIN_VECTOR_ANGLE)
     return false;
 
   return true;
@@ -156,20 +157,21 @@ void fusedVector(float &vx, float &vy)
 
     vx += dx * w;
     vy += dy * w;
-    if(validCount == 0)
-  {
-    vx = 0;
-    vy = 1; // default forward+
   }
+
+  if(validCount == 0)
+  {
+    vx = 0.0f;
+    vy = 1.0f; // default forward+
   }
 }
 void normalizeFusedVector(float &vx, float &vy)
 {
-  float mag = sqrt(vx*vx + vy*vy);
+  float mag = sqrtf(vx*vx + vy*vy);
   if(!isfinite(mag) || mag < 1e-6f)
   {
-    vx = 0;
-    vy = 1;   // default forward vector
+    vx = 0.0f;
+    vy = 1.0f;   // default forward vector
     return;
   }
     vx /= mag;
@@ -204,20 +206,23 @@ float computeSteering(float px, float dt) {
     float output = p + i + d;
     return atan2f(output, 40.0f) * 180.0f / PI;
 }
+
 static unsigned long lastTime = 0;
 
 void loop() {
   unsigned long now = millis();
-  float dt = (now - lastTime) / 1000.0f;
-  if (dt <= 0.0f || dt > 0.5f) dt = 0.02f;  
+  if (lastTime != 0 && (now - lastTime) < CONTROL_PERIOD_MS)
+    return;
+
+  float dt = (lastTime == 0) ? (CONTROL_PERIOD_MS / 1000.0f) : ((now - lastTime) / 1000.0f);
+  if (dt <= 0.0f || dt > 0.5f) dt = CONTROL_PERIOD_MS / 1000.0f;
   lastTime = now;
 
   pixy.line.getAllFeatures();
 
   normalizeVectors();
   float vx, vy;
-  fusedVector(vx, vy);
-  
+  fusedVector(vx, vy); 
   normalizeFusedVector(vx, vy);
   Serial.print("Fused vector: vx="); 
   Serial.print(vx); 
@@ -228,42 +233,9 @@ void loop() {
   float px, py;
   lookaheadPoint(vx, vy, px, py);
   float steering = computeSteering(px, dt); 
-  steering = constrain(steering, -20.0f, 20.0f); 
-  filteredSteering = LPF_ALPHA * filteredSteering + (1.0f - LPF_ALPHA) * steering;
-  float servoAngle = 90 + filteredSteering;
-  servoAngle = constrain(servoAngle, 70, 120);
+  steering = constrain(steering, -30.0f, 30.0f); 
+  float servoAngle = 90 + steering;
+  servoAngle = constrain(servoAngle, 60, 130);
   servo.write(servoAngle);
   runMotors(MOTOR_SPEED, MOTOR_SPEED);
-  //sendDataToESP(vx, vy, filteredSteering, servoAngle);
-  //servo.write(servoAngle);
-  Serial.print("Steering angle: ");
-  Serial.print(filteredSteering);
-  Serial.print("  Servo angle: ");
-  Serial.println(servoAngle);
-  delay(100);
-  /*pixy.line.getAllFeatures();
-
-  if (pixy.line.numVectors == 0)
-  {
-    servo.write(90);
-    return;
-  }
-
-  normalizeVectors();
-
-  float vx, vy;
-  fusedVector(vx, vy);
-
-  normalizeFusedVector(vx, vy);
-
-  float px, py;
-  lookaheadPoint(vx, vy, px, py);
-
-  float steering = computeSteering(px, 0.1); // Assuming a time step of 0.1 seconds
-
-  steering = constrain(steering, -35, 35);
-
-  filteredSteering = 0.7 * filteredSteering + 0.3 * steering;
-
-  servo.write(90 + filteredSteering);*/
 }
