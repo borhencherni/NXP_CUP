@@ -63,7 +63,7 @@
 
 #define SCREEN_CENTER_X     39.0
 
-#define TRACK_WIDTH_PX      236 //width of the track in pixels estimation à vérifier
+#define TRACK_WIDTH_PX      222 //width of the track in pixels estimation à vérifier
 
 
 

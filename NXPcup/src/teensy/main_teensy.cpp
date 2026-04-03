@@ -74,12 +74,12 @@ void loop() {
         return;
     }
     digitalWrite(LED_PIN, LOW);
-    if (trackInfo.isCrossing){
+    /*if (trackInfo.isCrossing){
         speedCtrl.runMotors(0, 0);
         servoCtrl.center();
         steering.reset();
         while(true);
-    }
+    }*/
     //lineDetector.getFusedVector(vx, vy);
      lineDetector.getTrackInfo(trackInfo);
     // ── Steering ──────────────────────────────────────────────────────────────

@@ -28,7 +28,7 @@ float SteeringController::currentTarget(TrackInfo& track) const{
     // 1. Geometric Reconstruction
     if (track.hasLeft && track.hasRight) {
         // Case A: Perfect Vision
-        return currentTargetX = (track.leftX + (track.rightX - 20)) / 2.0;
+        return currentTargetX = (track.leftX + track.rightX ) / 2.0;
     } 
     else if (track.hasLeft) {
         // Case B: Right Blind -> Use Left + Fixed Width

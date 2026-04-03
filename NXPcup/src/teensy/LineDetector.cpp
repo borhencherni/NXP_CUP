@@ -163,11 +163,14 @@ TrackInfo LineDetector::Sensors_Scan(Pixy2& pixy) {
     sortVectors(horz, h_idx);
 
     // Sort to find the "Main" lines (longest)
-    if(lefts[0].x0>((pixy.frameWidth/2)-82)){
-         sortLeftVectors(lefts, l_idx);
+    if(lefts[0].y0<50 && rights[0].y1>5){
+         //sortLeftVectors(lefts, l_idx);
+         
+         while(true){_speedCtrl.runMotors(0, 0);}
     }
-    if(rights[0].x0<((pixy.frameWidth/2)+82)){
-         sortLeftVectors(rights, l_idx);
+    if(rights[0].y0<50 && lefts[0].y1>5){
+         //sortRightVectors(rights, l_idx);
+         while(true){_speedCtrl.runMotors(0, 0);}
     }
     
 
@@ -188,7 +191,7 @@ TrackInfo LineDetector::Sensors_Scan(Pixy2& pixy) {
         Serial.print("there is Voectors");
 
     }*/
-    if(info.hasRight && !info.hasLeft) {while(true){_speedCtrl.runMotors(0, 0);}}
+    //if(info.hasRight && !info.hasLeft) {while(true){_speedCtrl.runMotors(0, 0);}}
 
     // LOGIC: Finish Line = Multiple Horizontal Lines
     if (h_idx>= 2)  {
