@@ -1,14 +1,14 @@
 #pragma once
 
 //define pins
-#define IN1 22
-#define IN2 23
-#define IN3 14
-#define IN4 15
+#define IN1 6
+#define IN2 7
+#define IN3 22
+#define IN4 23
 
 #define LED_PIN 16
 
-#define Servo_PIN 19
+#define Servo_PIN 17
 #define Channel_A_LEFT 2
 #define Channel_B_LEFT 3
 #define Channel_A_RIGHT 4

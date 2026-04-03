@@ -91,5 +91,5 @@ void loop() {
    int left_speed = constrain(150 * (1 - steerRatio), 0, 150);
    int right_speed = constrain(150 * (1 + steerRatio), 0, 150);
    speedCtrl.setSpeed(left_speed, right_speed);*/
-   speedCtrl.runMotors(100, 100);
+   speedCtrl.runMotors(150, 150);
 }
