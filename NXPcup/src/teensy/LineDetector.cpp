@@ -161,17 +161,13 @@ TrackInfo LineDetector::Sensors_Scan(Pixy2& pixy) {
     sortVectors(lefts, l_idx);
     sortVectors(rights, r_idx);
     sortVectors(horz, h_idx);
-
+    /*if(rights[0].x0>rights[1].x0 + 30){
+        while(true){_speedCtrl.runMotors(0, 0);}
+       
+    }*/
     // Sort to find the "Main" lines (longest)
-    if(lefts[0].y0<50 && rights[0].y1>5){
-         //sortLeftVectors(lefts, l_idx);
-         
-         while(true){_speedCtrl.runMotors(0, 0);}
-    }
-    if(rights[0].y0<50 && lefts[0].y1>5){
-         //sortRightVectors(rights, l_idx);
-         while(true){_speedCtrl.runMotors(0, 0);}
-    }
+    
+    
     
 
     if (l_idx > 0) {

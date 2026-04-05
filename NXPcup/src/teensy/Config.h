@@ -6,7 +6,7 @@
 #define IN3 22
 #define IN4 23
 
-#define LED_PIN 16
+//#define LED_PIN 16
 
 #define Servo_PIN 17
 #define Channel_A_LEFT 2
@@ -25,7 +25,7 @@
 
 
 // Vector filtering
-#define MIN_VECTOR_LEN    7.0f    // ignore very short noise vectors
+#define MIN_VECTOR_LEN    10.0f    // ignore very short noise vectors
 #define MIN_VECTOR_ANGLE  2.0f     // ignore near-horizontal vectors (deg)
 
 
@@ -34,21 +34,21 @@
 #define L_MAX             0.9f     // long lookahead on straights (smooth)
 
 //STEERING PID GAINS 
-#define KP                2.0f
+#define KP                1.0f
 #define KI                0.0f    
 #define KD                0.0f 
 #define I_MAX             15.0f   // Integral windup clamp
 
 // servo variables
 #define SERVO_CENTER      90
-#define SERVO_MIN         40       
-#define SERVO_MAX         120  
+#define SERVO_MIN         60       
+#define SERVO_MAX         130  
 
 // Low-pass filter alpha 
 #define LPF_ALPHA 0.8f
 
 //SPEED PID GAINS 
-#define KP_S                0.80f
+#define KP_S                2.0f
 #define KI_S                0.0f    
 #define KD_S                0.0f 
 #define I_MAX_S             15.0f   // Integral windup clamp
@@ -63,7 +63,7 @@
 
 #define SCREEN_CENTER_X     39.0
 
-#define TRACK_WIDTH_PX      222 //width of the track in pixels estimation à vérifier
+#define TRACK_WIDTH_PX      237 //width of the track in pixels estimation à vérifier
 
 
 

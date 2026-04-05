@@ -18,7 +18,7 @@ float SteeringController::compute(TrackInfo& track, float dt) {
     // Low-pass filter to smooth out rapid servo jitter
     _filteredSteering = LPF_ALPHA * _filteredSteering + (1.0f - LPF_ALPHA) * raw;
 
-    return constrain(_filteredSteering, -30.0f, 20.0f);
+    return constrain(_filteredSteering, -30.0f, 30.0f);
 }
 
 

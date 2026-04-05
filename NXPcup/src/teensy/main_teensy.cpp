@@ -37,7 +37,7 @@ void setup() {
     pinMode(Channel_B_LEFT, INPUT_PULLUP);
     pinMode(Channel_A_RIGHT, INPUT_PULLUP);
     pinMode(Channel_A_LEFT, INPUT_PULLUP);
-    pinMode(LED_PIN, OUTPUT);
+    //pinMode(LED_PIN, OUTPUT);
     attachInterrupt(Channel_A_RIGHT, ISR_Right, CHANGE);
     attachInterrupt(Channel_A_LEFT, ISR_Left, CHANGE);
     
@@ -68,12 +68,12 @@ void loop() {
     // ── Steering ──────────────────────────────────────────────────────────────
         float steeringAngle = steering.compute(trackInfo, dt);
         float servoAngle    = servoCtrl.Steer(steeringAngle + SERVO_CENTER);
-        speedCtrl.runMotors(80, 80);
-        digitalWrite(LED_PIN, HIGH);
+        speedCtrl.runMotors(0, 0);
+        //digitalWrite(LED_PIN, HIGH);
         //Serial.println("No line detected");
         return;
     }
-    digitalWrite(LED_PIN, LOW);
+    //digitalWrite(LED_PIN, LOW);
     /*if (trackInfo.isCrossing){
         speedCtrl.runMotors(0, 0);
         servoCtrl.center();
