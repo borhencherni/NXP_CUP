@@ -15,26 +15,27 @@ Servo servo;
 //ratio = frameWidth / frameHeight = 78 / 51 ≈ 1.53
 //This means 1 pixel of height = 1.53 pixels of width in real-world distance.
 #define SCALE_Y(y)        ((y) * 1.53f)
-#define KP                1.0f
-#define KI                0.0f    
-#define KD                0.0f 
+#define KP                40.0f
+#define KI                0.3f    
+#define KD                1.5f 
 #define SERVO_CENTER      90
 #define SERVO_MIN         60       
 #define SERVO_MAX         130  
-#define I_MAX             15.0f   // Integral windup clamp
+#define I_MAX             10.0f   // Integral windup clamp
 // Lookahead 
-#define L_MIN             0.4f     // short lookahead in tight turns (reactive)
-#define L_MAX             0.9f     // long lookahead on straights (smooth)
+#define L_MIN             0.25f     // short lookahead in tight turns (reactive)
+#define L_MAX             0.75f     // long lookahead on straights (smooth)
 // Vector filtering
-#define MIN_VECTOR_LEN    10.0f    // ignore very short noise vectors
-#define MIN_VECTOR_ANGLE  2.0f     // ignore near-horizontal vectors (deg)
+#define MIN_VECTOR_LEN    12.0f    // ignore very short noise vectors
+#define MAX_VECTOR_LEN    100.0f   // cap max vector length to avoid outliers dominating
+#define MIN_VECTOR_ANGLE  10.0f     // ignore near-horizontal vectors (deg)
 
-// Low-pass filter alpha 
-//#define LPF_ALPHA 0.7f
+#define STEERING_DEADBAND  1.0f   // degrees — ignore corrections smaller than this
+#define MAX_SERVO_STEP    20.0f    // max degrees servo can move per cycle
 
-#define CONTROL_PERIOD_MS 50
+#define CONTROL_PERIOD_MS 10
 
-#define MOTOR_SPEED 100
+#define MOTOR_SPEED 160
 
 float filteredSteering  = 0.0f;
 float integralError     = 0.0f;     //  PID integral term
@@ -131,7 +132,8 @@ bool validVector(int i)
 
   if(length < MIN_VECTOR_LEN)
     return false;
-
+  if(length > MAX_VECTOR_LEN)
+    return false;
   float angle = atan2f(dy,dx) * 180.0f / PI;
 
   if(fabsf(angle) < MIN_VECTOR_ANGLE)
@@ -224,18 +226,28 @@ void loop() {
   float vx, vy;
   fusedVector(vx, vy); 
   normalizeFusedVector(vx, vy);
-  Serial.print("Fused vector: vx="); 
-  Serial.print(vx); 
-  Serial.print(" vy="); 
-  Serial.println(vy);
-  Serial.print("Num vectors: ");
-  Serial.println(pixy.line.numVectors);
+  //Serial.print("Fused vector: vx="); 
+  //Serial.print(vx); 
+  //Serial.print(" vy="); 
+  //Serial.println(vy);
+  //Serial.print("Num vectors: ");
+  //Serial.println(pixy.line.numVectors);
   float px, py;
   lookaheadPoint(vx, vy, px, py);
-  float steering = computeSteering(px, dt); 
-  steering = constrain(steering, -30.0f, 30.0f); 
-  float servoAngle = 90 + steering;
-  servoAngle = constrain(servoAngle, 60, 130);
-  servo.write(servoAngle);
+  float steering = computeSteering(px, dt);
+  steering = constrain(steering, -30.0f, 30.0f);
+
+  // Deadband
+  if (fabsf(steering) < STEERING_DEADBAND)
+      steering = 0.0f;
+
+  // Slew rate limit
+  float servoAngle = SERVO_CENTER + steering;
+  servoAngle = constrain(servoAngle, SERVO_MIN, SERVO_MAX);
+  float step = constrain(servoAngle - lastSteeringAngle, -MAX_SERVO_STEP, MAX_SERVO_STEP);
+  servoAngle = lastSteeringAngle + step;
+  lastSteeringAngle = servoAngle;
+
+  servo.write((int)servoAngle);
   runMotors(MOTOR_SPEED, MOTOR_SPEED);
 }
