@@ -5,6 +5,8 @@
 #define IN2 23
 #define IN3 6
 #define IN4 7
+#define ECHO 19
+#define TRIG 18
 
 Pixy2 pixy;
 Servo servo;
@@ -17,7 +19,7 @@ Servo servo;
 #define SCALE_Y(y)        ((y) * 1.53f)
 #define KP                40.0f
 #define KI                0.3f    
-#define KD                1.5f 
+#define KD                1.4f 
 #define SERVO_CENTER      90
 #define SERVO_MIN         60       
 #define SERVO_MAX         130  
@@ -28,10 +30,10 @@ Servo servo;
 // Vector filtering
 #define MIN_VECTOR_LEN    12.0f    // ignore very short noise vectors
 #define MAX_VECTOR_LEN    100.0f   // cap max vector length to avoid outliers dominating
-#define MIN_VECTOR_ANGLE  10.0f     // ignore near-horizontal vectors (deg)
+#define MIN_VECTOR_ANGLE  2.0f     // ignore near-horizontal vectors (deg)
 
 #define STEERING_DEADBAND  1.0f   // degrees — ignore corrections smaller than this
-#define MAX_SERVO_STEP    20.0f    // max degrees servo can move per cycle
+#define MAX_SERVO_STEP    30.0f    // max degrees servo can move per cycle
 
 #define CONTROL_PERIOD_MS 10
 
@@ -40,8 +42,8 @@ Servo servo;
 float filteredSteering  = 0.0f;
 float integralError     = 0.0f;     //  PID integral term
 float lastError         = 0.0f;     //  PID derivative term
-float lastSteeringAngle = SERVO_CENTER;
-
+float lastSteeringAngle = SERVO_CENTER-5.0f; // Start slightly left to encourage initial turn onto line
+unsigned long startTime = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -54,7 +56,9 @@ void setup() {
   pinMode(IN2, OUTPUT);
   pinMode(IN3, OUTPUT);
   pinMode(IN4, OUTPUT);
-
+  pinMode(TRIG, OUTPUT);
+  pinMode(ECHO, INPUT);
+  startTime = millis();
 }
 
 static void driveMotor(int forwardPin, int reversePin, int speed)
@@ -78,21 +82,16 @@ void runMotors(int LPWM,int RPWM){
   driveMotor(IN3, IN4, RPWM);
 }
 
-void sendDataToESP(float vx, float vy, float steeringangle, float servoangle)
-{
-  Serial3.print("D,");   
-  Serial3.print(vx,4);
-  Serial3.print(",");
+float readUltrasonic() {
+  digitalWrite(TRIG, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG, LOW);
 
-  Serial3.print(vy,4);
-  Serial3.print(",");
-
-  Serial3.print(steeringangle,2);
-  Serial3.print(",");
-
-  Serial3.print(servoangle,2);
-
-  Serial3.println();   
+  long duration = pulseIn(ECHO, HIGH);
+  float distance = (duration * 0.0343) / 2; // Convert to cm
+  return distance;
 }
 void normalizeVectors()
 {
@@ -250,4 +249,11 @@ void loop() {
 
   servo.write((int)servoAngle);
   runMotors(MOTOR_SPEED, MOTOR_SPEED);
+  if(millis()-startTime>10000){
+    float distance = readUltrasonic();
+    if (distance > 10 && distance < 20){
+      runMotors(0, 0);
+      while(1);
+    }
+  }
 }
