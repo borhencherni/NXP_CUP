@@ -23,7 +23,8 @@
 class LineDetector{
     public:
         explicit LineDetector(Pixy2& pixy);
-        
+        int onlyHasLeft = 0;
+        int onlyHasRight = 0;
         bool update(); 
         //traja3 1 logique ken famma au moins 1 vecteur valide sino traja3 0 
         //+ ta3mel traitement 3la el vecteuret ken mawjoudin

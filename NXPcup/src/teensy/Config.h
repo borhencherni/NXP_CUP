@@ -1,70 +1,100 @@
 #pragma once
 
-//define pins
+// ─── Pin definitions ──────────────────────────────────────────────────────────
 #define IN1 6
 #define IN2 7
 #define IN3 22
 #define IN4 23
 
-//#define LED_PIN 16
+#define Servo_PIN         17
+#define Channel_A_LEFT    2
+#define Channel_B_LEFT    3
+#define Channel_A_RIGHT   4
+#define Channel_B_RIGHT   5
 
-#define Servo_PIN 17
-#define Channel_A_LEFT 2
-#define Channel_B_LEFT 3
-#define Channel_A_RIGHT 4
-#define Channel_B_RIGHT 5
+// ─── Pixy2 frame dimensions ───────────────────────────────────────────────────
+// The Pixy2 produces 317 px wide images in this configuration.
+// frameHeight scales proportionally: 317 / 78 * 51 ≈ 207 px.
+// The Pixy2 library exposes pixy.frameWidth / pixy.frameHeight at runtime;
+// these defines are only used where a compile-time constant is unavoidable.
+#define FRAME_WIDTH       317
+#define FRAME_HEIGHT      207
 
-//pixy2 Aspect ratio correction
-// Aspect ratio correction: Pixy2 pixels are not square
-// frameWidth=78, frameHeight=51 → real ratio ≈ 1.53
-//frameWidth  = 78 pixels   →  covers the full horizontal FOV
-//frameHeight = 51 pixels   →  covers the full vertical FOV
-//ratio = frameWidth / frameHeight = 78 / 51 ≈ 1.53
-//This means 1 pixel of height = 1.53 pixels of width in real-world distance.
+// ─── Pixy2 aspect-ratio correction ───────────────────────────────────────────
+// The ratio is derived from the sensor's physical FOV, not its resolution,
+// so it stays the same regardless of resolution mode.
 #define SCALE_Y(y)        ((y) * 1.53f)
 
+// ─── Vector filtering ─────────────────────────────────────────────────────────
+// MIN_VECTOR_LEN scales with frame width: 10 * (317/78) ≈ 40 px.
+// Keeps the same physical angular span filtered at the new resolution
+#define MIN_VECTOR_LEN    10.0f
 
-// Vector filtering
-#define MIN_VECTOR_LEN    10.0f    // ignore very short noise vectors
-#define MIN_VECTOR_ANGLE  2.0f     // ignore near-horizontal vectors (deg)
+// Angle threshold is purely geometric — does not depend on resolution.
+#define MIN_TRACK_ANGLE   5.0f
 
+// ─── Lookahead ────────────────────────────────────────────────────────────────
+#define L_MIN             0.3f
+#define L_MAX             0.7f
 
-// Lookahead 
-#define L_MIN             0.4f     // short lookahead in tight turns (reactive)
-#define L_MAX             0.9f     // long lookahead on straights (smooth)
+// ─── Steering PID gains ───────────────────────────────────────────────────────
+#define KP                3.0f
+#define KI                0.0f
+#define KD                0.0f
+#define I_MAX             10.0f
 
-//STEERING PID GAINS 
-#define KP                1.0f
-#define KI                0.0f    
-#define KD                0.0f 
-#define I_MAX             15.0f   // Integral windup clamp
-
-// servo variables
+// ─── Servo ────────────────────────────────────────────────────────────────────
 #define SERVO_CENTER      90
-#define SERVO_MIN         60       
-#define SERVO_MAX         130  
+#define SERVO_MIN         70
+#define SERVO_MAX         110
 
-// Low-pass filter alpha 
-#define LPF_ALPHA 0.8f
+// ─── Low-pass filter ─────────────────────────────────────────────────────────
+#define LPF_ALPHA         0.7f
 
-//SPEED PID GAINS 
-#define KP_S                2.0f
-#define KI_S                0.0f    
-#define KD_S                0.0f 
-#define I_MAX_S             15.0f   // Integral windup clamp
+// ─── Speed PID gains ─────────────────────────────────────────────────────────
+#define KP_S              2.0f
+#define KI_S              0.0f
+#define KD_S              0.0f
+#define I_MAX_S           15.0f
 
-//nombre de ticks pour une rotation complète
-#define nb_t_p_rot 22
+// ─── Encoder ─────────────────────────────────────────────────────────────────
+#define nb_t_p_rot        22
+#define SPEED_PERIOD_MS   5
 
-#define SPEED_PERIOD_MS 100  // 100ms = 10Hz control loop
+// ─── Steering PID virtua&l-triangle constant ───────────────────────────────────
+// STEERING_PIXEL_SCALE converts a pixel error into a steering angle via atan2.
+// It must scale with frame width so the same real-world angular error produces
+// the same steering output regardless of resolution.
+// Previous value was 40 for a 78 px frame:  40 * (317 / 78) ≈ 163
+#define STEERING_PIXEL_SCALE  163.0f
 
+// ─── Frame centre (compile-time reference) ────────────────────────────────────
+// 317 / 2 = 158.5.  Most code reads pixy.frameWidth/2 dynamically at runtime.
+#define SCREEN_CENTER_X       158.5f
 
-#define STEERING_PIXEL_SCALE  40.0f //imaginary triangle constant in steering PID
+// ─── Track geometry ───────────────────────────────────────────────────────────
+// Used when only ONE line is visible to estimate the lane centre.
+//
+// Calibration (do this once on the real track):
+//   1. Place the car centred on the track.
+//   2. Open Serial monitor; read leftX and rightX.
+//   3. Set TRACK_WIDTH_PX = rightX - leftX.
+//
+// Starting estimate scaled from old value:  45 * (317 / 78) ≈ 183 px.
+#define TRACK_WIDTH_PX        215
 
-#define SCREEN_CENTER_X     39.0
+// ─── Intersection handling ────────────────────────────────────────────────────
+// Duration the robot drives straight after a crossing is detected.
+// Resolution-independent (time-based).
+#define INTERSECTION_HOLD_MS  1500UL
 
-#define TRACK_WIDTH_PX      237 //width of the track in pixels estimation à vérifier
+// Continuity filter: max head-position drift between frames to still be
+// considered the same line. Scaled: 22 * (317/78) ≈ 89 px.
+#define CONTINUITY_THRESHOLD_PX  89.0f
 
-
+// ─── Adaptive speed ──────────────────────────────────────────────────────────
+#define BASE_SPEED           170    // PWM on a straight
+#define MIN_SPEED            150    // PWM in the tightest turn
+#define INTERSECTION_SPEED   0    // PWM while crossing an intersection
 
 
