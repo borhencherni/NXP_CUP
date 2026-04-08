@@ -45,11 +45,11 @@
 
 // ─── Servo ────────────────────────────────────────────────────────────────────
 #define SERVO_CENTER      90
-#define SERVO_MIN         70
-#define SERVO_MAX         110
+#define SERVO_MIN         60
+#define SERVO_MAX         120
 
 // ─── Low-pass filter ─────────────────────────────────────────────────────────
-#define LPF_ALPHA         0.7f
+#define LPF_ALPHA         0.75f
 
 // ─── Speed PID gains ─────────────────────────────────────────────────────────
 #define KP_S              2.0f
@@ -93,7 +93,7 @@
 #define CONTINUITY_THRESHOLD_PX  89.0f
 
 // ─── Adaptive speed ──────────────────────────────────────────────────────────
-#define BASE_SPEED           170    // PWM on a straight
+#define BASE_SPEED           200    // PWM on a straight
 #define MIN_SPEED            150    // PWM in the tightest turn
 #define INTERSECTION_SPEED   0    // PWM while crossing an intersection
 

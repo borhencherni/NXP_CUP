@@ -74,10 +74,10 @@ void loop() {
     if (!linesFound) {
        
         // No vectors at all – hold last steering, stop motors as a safety measure.
-        float steeringAngle = 0;//steering.compute(trackInfo, dt);
-        servoCtrl.Steer(steeringAngle + SERVO_CENTER -20);
+        float steeringAngle = 0; //steering.compute(trackInfo, dt);
+        servoCtrl.Steer(steeringAngle + SERVO_CENTER );
         speedCtrl.runMotors(100, 100);
-        delay(300);
+        delay(200);
         
         return;
     }

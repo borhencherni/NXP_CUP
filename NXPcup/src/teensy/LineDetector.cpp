@@ -150,10 +150,12 @@ TrackInfo LineDetector::Sensors_Scan(Pixy2& pixy) {
             if (h_idx < 10) horz[h_idx++] = v;
             continue;
         }
-        if(v.x1>pixy.frameWidth-25 && v.x0>pixy.frameWidth-25) continue;
-        if (v.x1<25 && v.x0<25) {continue;
+        if(v.x1>pixy.frameWidth-33 && v.x0>pixy.frameWidth-33) continue;
+        if (v.x1<33 && v.x0<33) {continue;
         
         }
+        if(v.y1>pixy.frameHeight-13 || v.y0<13) continue;
+        
         //if(v.y1<10) continue;
          //if(v.y1<5) continue;
         // Classify left / right by the BOTTOM of the vector (where the line is
@@ -245,6 +247,20 @@ TrackInfo LineDetector::Sensors_Scan(Pixy2& pixy) {
     if (r_idx > 0) {
         info.hasRight = true;
         info.rightX   = (rights[0].y1 < rights[0].y0) ? rights[0].x1 : rights[0].x0;
+    }
+    if(!info.hasLeft && !info.hasRight && horz[0].length!=0){
+        if((horz[0].x0<pixy.frameWidth/2)){
+            info.hasLeft = true;
+            info.leftX   = (horz[0].y1 < horz[0].y0) ? horz[0].x1 : horz[0].x0;
+        }
+        else{
+            info.hasRight = true;
+            info.rightX   = (horz[0].y1 < horz[0].y0) ? horz[0].x1 : horz[0].x0;
+        }
+        info.hasLeft = _lastHasleft;
+        info.leftX = _lastLeftX;
+        info.hasRight = _lastHasright;
+        info.rightX = _lastRightX;
     }
 
     // Persist for next frame
