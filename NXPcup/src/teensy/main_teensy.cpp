@@ -17,32 +17,37 @@ Servo servo;
 //ratio = frameWidth / frameHeight = 78 / 51 ≈ 1.53
 //This means 1 pixel of height = 1.53 pixels of width in real-world distance.
 #define SCALE_Y(y)        ((y) * 1.53f)
-#define KP                40.0f
+#define KP                5.0f
 #define KI                0.3f    
-#define KD                1.4f 
+#define KD                1.0f 
 #define SERVO_CENTER      90
-#define SERVO_MIN         60       
-#define SERVO_MAX         130  
+#define SERVO_MIN         50      
+#define SERVO_MAX         140 
 #define I_MAX             10.0f   // Integral windup clamp
 // Lookahead 
-#define L_MIN             0.25f     // short lookahead in tight turns (reactive)
+#define L_MIN             0.15f     // short lookahead in tight turns (reactive)
 #define L_MAX             0.75f     // long lookahead on straights (smooth)
 // Vector filtering
-#define MIN_VECTOR_LEN    12.0f    // ignore very short noise vectors
-#define MAX_VECTOR_LEN    100.0f   // cap max vector length to avoid outliers dominating
+#define MIN_VECTOR_LEN    8.0f    // ignore very short noise vectors
+#define MAX_VECTOR_LEN    110.0f   // cap max vector length to avoid outliers dominating
 #define MIN_VECTOR_ANGLE  2.0f     // ignore near-horizontal vectors (deg)
 
-#define STEERING_DEADBAND  1.0f   // degrees — ignore corrections smaller than this
-#define MAX_SERVO_STEP    30.0f    // max degrees servo can move per cycle
+#define STEERING_DEADBAND  2.0f   // degrees — ignore corrections smaller than this
+#define MAX_SERVO_STEP    10.0f    // max degrees servo can move per cycle
 
-#define CONTROL_PERIOD_MS 10
+#define CONTROL_PERIOD_MS 5
 
-#define MOTOR_SPEED 160
+#define MOTOR_SPEED 230
+#define SERVO_FILTER_SIZE 5
+
+float servoBuffer[SERVO_FILTER_SIZE];
+int servoIndex = 0;
+bool bufferFilled = false;
 
 float filteredSteering  = 0.0f;
 float integralError     = 0.0f;     //  PID integral term
 float lastError         = 0.0f;     //  PID derivative term
-float lastSteeringAngle = SERVO_CENTER-5.0f; // Start slightly left to encourage initial turn onto line
+float lastSteeringAngle = SERVO_CENTER ; // Start slightly left to encourage initial turn onto line
 unsigned long startTime = 0;
 
 void setup() {
@@ -93,6 +98,32 @@ float readUltrasonic() {
   float distance = (duration * 0.0343) / 2; // Convert to cm
   return distance;
 }
+
+float computeMedian(float *arr, int size)
+{
+  float temp[SERVO_FILTER_SIZE];
+  
+  // Copy array
+  for(int i = 0; i < size; i++)
+    temp[i] = arr[i];
+
+  // Simple bubble sort
+  for(int i = 0; i < size-1; i++)
+  {
+    for(int j = i+1; j < size; j++)
+    {
+      if(temp[j] < temp[i])
+      {
+        float t = temp[i];
+        temp[i] = temp[j];
+        temp[j] = t;
+      }
+    }
+  }
+
+  return temp[size/2]; // middle value
+}
+
 void normalizeVectors()
 {
   for(int i=0;i<pixy.line.numVectors;i++)
@@ -247,11 +278,29 @@ void loop() {
   servoAngle = lastSteeringAngle + step;
   lastSteeringAngle = servoAngle;
 
-  servo.write((int)servoAngle);
+  servoBuffer[servoIndex] = servoAngle;
+  servoIndex++;
+
+  if(servoIndex >= SERVO_FILTER_SIZE)
+  {
+    servoIndex = 0;
+    bufferFilled = true;
+  }
+
+  // Use filtered value only when buffer is ready
+  float filteredServo = servoAngle;
+
+  if(bufferFilled)
+  {
+    filteredServo = computeMedian(servoBuffer, SERVO_FILTER_SIZE);
+  }
+
+  // Apply servo
+  servo.write((int)filteredServo);
   runMotors(MOTOR_SPEED, MOTOR_SPEED);
   if(millis()-startTime>10000){
     float distance = readUltrasonic();
-    if (distance > 10 && distance < 20){
+    if (distance > 15 && distance < 30){
       runMotors(0, 0);
       while(1);
     }
