@@ -17,23 +17,23 @@ Servo servo;
 //ratio = frameWidth / frameHeight = 78 / 51 ≈ 1.53
 //This means 1 pixel of height = 1.53 pixels of width in real-world distance.
 #define SCALE_Y(y)        ((y) * 1.53f)
-#define KP                5.0f
-#define KI                0.3f    
-#define KD                1.0f 
+#define KP                0.25f
+#define KI                0.0f    
+#define KD                0.05f 
 #define SERVO_CENTER      90
-#define SERVO_MIN         50      
-#define SERVO_MAX         140 
+#define SERVO_MIN         60      
+#define SERVO_MAX         140
 #define I_MAX             10.0f   // Integral windup clamp
 // Lookahead 
 #define L_MIN             0.15f     // short lookahead in tight turns (reactive)
-#define L_MAX             0.75f     // long lookahead on straights (smooth)
+#define L_MAX             0.85f     // long lookahead on straights (smooth)
 // Vector filtering
-#define MIN_VECTOR_LEN    8.0f    // ignore very short noise vectors
+#define MIN_VECTOR_LEN    10.0f    // ignore very short noise vectors
 #define MAX_VECTOR_LEN    110.0f   // cap max vector length to avoid outliers dominating
-#define MIN_VECTOR_ANGLE  2.0f     // ignore near-horizontal vectors (deg)
+#define MIN_VECTOR_ANGLE  5.0f     // ignore near-horizontal vectors (deg)
 
 #define STEERING_DEADBAND  2.0f   // degrees — ignore corrections smaller than this
-#define MAX_SERVO_STEP    10.0f    // max degrees servo can move per cycle
+#define MAX_SERVO_STEP    50.0f    // max degrees servo can move per cycle
 
 #define CONTROL_PERIOD_MS 5
 
@@ -47,7 +47,7 @@ bool bufferFilled = false;
 float filteredSteering  = 0.0f;
 float integralError     = 0.0f;     //  PID integral term
 float lastError         = 0.0f;     //  PID derivative term
-float lastSteeringAngle = SERVO_CENTER ; // Start slightly left to encourage initial turn onto line
+float lastSteeringAngle = SERVO_CENTER - 10.0f; // Start slightly left to encourage initial turn onto line
 unsigned long startTime = 0;
 
 void setup() {
@@ -64,6 +64,16 @@ void setup() {
   pinMode(TRIG, OUTPUT);
   pinMode(ECHO, INPUT);
   startTime = millis();
+}
+bool isNinetyDegree(int i)
+{
+  float dx = pixy.line.vectors[i].m_x1 - pixy.line.vectors[i].m_x0;
+  float dy = SCALE_Y(pixy.line.vectors[i].m_y1) - SCALE_Y(pixy.line.vectors[i].m_y0);
+
+  float angle = atan2f(dy, dx) * 180.0f / PI;
+
+  // Detect near-horizontal lines (90° turn indicators)
+  return (fabsf(angle) < 20.0f); // tune: 15–25
 }
 
 static void driveMotor(int forwardPin, int reversePin, int speed)
@@ -176,12 +186,21 @@ void fusedVector(float &vx, float &vy)
   vx = 0.0f;
   vy = 0.0f;
   int validCount = 0;
+  bool has90 = false;   
 
   for(int i=0;i<pixy.line.numVectors;i++)
   {
     if(!validVector(i))
-    continue;
+      continue;
+
+    if(isNinetyDegree(i))
+    {
+      has90 = true;
+      continue; 
+    }
+
     validCount++;
+
     float dx = pixy.line.vectors[i].m_x1 - pixy.line.vectors[i].m_x0;
     float dy = SCALE_Y(pixy.line.vectors[i].m_y1) - SCALE_Y(pixy.line.vectors[i].m_y0);
 
@@ -191,10 +210,17 @@ void fusedVector(float &vx, float &vy)
     vy += dy * w;
   }
 
+  // Default forward if nothing valid
   if(validCount == 0)
   {
     vx = 0.0f;
-    vy = 1.0f; // default forward+
+    vy = 1.0f;
+  }
+
+  if(has90 && validCount > 0)
+  {
+    vx = 0.0f;
+    vy = 1.0f;
   }
 }
 void normalizeFusedVector(float &vx, float &vy)
@@ -239,6 +265,11 @@ float computeSteering(float px, float dt) {
     return atan2f(output, 40.0f) * 180.0f / PI;
 }
 
+bool isSharpTurn(float steering)
+{
+  return fabsf(steering) > 15.0f;  // threshold
+}
+
 static unsigned long lastTime = 0;
 
 void loop() {
@@ -265,13 +296,15 @@ void loop() {
   float px, py;
   lookaheadPoint(vx, vy, px, py);
   float steering = computeSteering(px, dt);
-  steering = constrain(steering, -30.0f, 30.0f);
+  steering = constrain(steering, -40.0f, 40.0f);
 
-  // Deadband
   if (fabsf(steering) < STEERING_DEADBAND)
       steering = 0.0f;
 
-  // Slew rate limit
+  if(fabsf(vx) < 0.05f && vy > 0.9f)
+  {
+  steering = 0.0f;
+  }
   float servoAngle = SERVO_CENTER + steering;
   servoAngle = constrain(servoAngle, SERVO_MIN, SERVO_MAX);
   float step = constrain(servoAngle - lastSteeringAngle, -MAX_SERVO_STEP, MAX_SERVO_STEP);
@@ -290,14 +323,18 @@ void loop() {
   // Use filtered value only when buffer is ready
   float filteredServo = servoAngle;
 
-  if(bufferFilled)
+  if(bufferFilled && !isSharpTurn(steering))
   {
-    filteredServo = computeMedian(servoBuffer, SERVO_FILTER_SIZE);
+  filteredServo = computeMedian(servoBuffer, SERVO_FILTER_SIZE);
   }
-
-  // Apply servo
   servo.write((int)filteredServo);
-  runMotors(MOTOR_SPEED, MOTOR_SPEED);
+  float turnFactor = fabsf(steering) / 50.0f; // normalize 0 → 1
+
+  int speed = MOTOR_SPEED * (1.0f - 0.5f * turnFactor); 
+
+  speed = constrain(speed, 160, MOTOR_SPEED);
+
+  runMotors(speed, speed);
   if(millis()-startTime>10000){
     float distance = readUltrasonic();
     if (distance > 15 && distance < 30){
