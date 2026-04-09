@@ -1,3 +1,4 @@
+
 #include <Arduino.h>
 #include <Servo.h>
 #include <Pixy2.h>
@@ -32,13 +33,27 @@ Servo servo;
 #define MAX_VECTOR_LEN    110.0f   // cap max vector length to avoid outliers dominating
 #define MIN_VECTOR_ANGLE  5.0f     // ignore near-horizontal vectors (deg)
 
-#define STEERING_DEADBAND  2.0f   // degrees — ignore corrections smaller than this
+#define STEERING_DEADBAND  4.0f   // degrees — ignore corrections smaller than this
 #define MAX_SERVO_STEP    50.0f    // max degrees servo can move per cycle
 
-#define CONTROL_PERIOD_MS 5
+#define CONTROL_PERIOD_MS 40
 
 #define MOTOR_SPEED 230
 #define SERVO_FILTER_SIZE 5
+
+// --- Lane balancing ---
+#define LEFT_GAIN   15.0f   // how strong correction when only right line is seen
+#define RIGHT_GAIN  15.0f   // how strong correction when only left line is seen
+
+#define DASH_MAX_LEN        28.0f   // dashes are SHORT — tune to your track
+#define DASH_MIN_LEN         5.0f   // ignore pure noise
+#define DASH_CENTER_MARGIN  20      // dash x must be inside lane center zone
+#define DASH_ANGLE_THRESH   30.0f   // near-horizontal, same as isNinetyDegree
+#define DASH_Y_PROXIMITY    18      // two dashes must be within this many px vertically
+#define DASH_CONFIRM_FRAMES  2      // debounce: must see dashes N consecutive frames
+
+bool hasLeft  = false;
+bool hasRight = false;
 
 float servoBuffer[SERVO_FILTER_SIZE];
 int servoIndex = 0;
@@ -47,8 +62,12 @@ bool bufferFilled = false;
 float filteredSteering  = 0.0f;
 float integralError     = 0.0f;     //  PID integral term
 float lastError         = 0.0f;     //  PID derivative term
-float lastSteeringAngle = SERVO_CENTER - 10.0f; // Start slightly left to encourage initial turn onto line
+float lastSteeringAngle = SERVO_CENTER ; // Start slightly left to encourage initial turn onto line
 unsigned long startTime = 0;
+
+int   dashConfidence    = 0;
+bool  dashDetected      = false;
+unsigned long dashTime  = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -269,6 +288,121 @@ bool isSharpTurn(float steering)
 {
   return fabsf(steering) > 15.0f;  // threshold
 }
+bool isIntersectionPixy(int i, int j)
+{
+  float dx1 = pixy.line.vectors[i].m_x1 - pixy.line.vectors[i].m_x0;
+  float dy1 = SCALE_Y(pixy.line.vectors[i].m_y1) - SCALE_Y(pixy.line.vectors[i].m_y0);
+
+  float dx2 = pixy.line.vectors[j].m_x1 - pixy.line.vectors[j].m_x0;
+  float dy2 = SCALE_Y(pixy.line.vectors[j].m_y1) - SCALE_Y(pixy.line.vectors[j].m_y0);
+
+  float mag1 = sqrtf(dx1*dx1 + dy1*dy1);
+  float mag2 = sqrtf(dx2*dx2 + dy2*dy2);
+
+  if(mag1 < 1e-5 || mag2 < 1e-5)
+    return false;
+
+  float dot = (dx1*dx2 + dy1*dy2) / (mag1 * mag2); // cos(angle)
+
+  // Intersection if near perpendicular
+  return fabsf(dot) < 0.25f;   // tune: 0.2 → strict, 0.4 → more sensitive
+}
+
+void detectLaneSides()
+{
+  hasLeft  = false;
+  hasRight = false;
+
+  int midX = pixy.frameWidth / 2;
+  int minY = pixy.frameHeight * 0.5; // ONLY lower half
+
+  for(int i = 0; i < pixy.line.numVectors; i++)
+  {
+    if(!validVector(i))
+      continue;
+
+    int x0 = pixy.line.vectors[i].m_x0;
+    int y0 = pixy.line.vectors[i].m_y0;
+
+    // Only consider bottom region
+    if(y0 < minY)
+      continue;
+
+    if(x0 < midX)
+      hasLeft = true;
+    else
+      hasRight = true;
+  }
+}
+
+bool isCenterDash(int i) {
+  float dx = pixy.line.vectors[i].m_x1 - pixy.line.vectors[i].m_x0;
+  float dy = SCALE_Y(pixy.line.vectors[i].m_y1)
+           - SCALE_Y(pixy.line.vectors[i].m_y0);
+
+  float length = sqrtf(dx * dx + dy * dy);
+  float angle  = atan2f(dy, dx) * 180.0f / PI;
+
+  // Must be horizontal
+  if (fabsf(angle) > DASH_ANGLE_THRESH) return false;
+
+  // Must be short (not a full-width intersection line)
+  if (length < DASH_MIN_LEN || length > DASH_MAX_LEN) return false;
+
+  // x0 must be in the center zone of the frame
+  int cx0 = pixy.line.vectors[i].m_x0;
+  int cx1 = pixy.line.vectors[i].m_x1;
+  int leftBound  = DASH_CENTER_MARGIN;
+  int rightBound = pixy.frameWidth - DASH_CENTER_MARGIN;
+
+  if (cx0 < leftBound || cx0 > rightBound) return false;
+  if (cx1 < leftBound || cx1 > rightBound) return false;
+
+  return true;
+}
+
+bool detectDashPair() {
+  // Collect candidate dash indices
+  int  candidates[8];
+  int  count = 0;
+
+  for (int i = 0; i < pixy.line.numVectors && count < 8; i++) {
+    if (isCenterDash(i)) {
+      candidates[count++] = i;
+    }
+  }
+
+  if (count < 4) return false;  // need at least two
+
+  for (int a = 0; a < count; a++) {
+    for (int b = a + 1; b < count; b++) {
+      int yA = pixy.line.vectors[candidates[a]].m_y0;
+      int yB = pixy.line.vectors[candidates[b]].m_y0;
+      if (abs(yA - yB) <= DASH_Y_PROXIMITY) {
+        return true;  // found a valid pair
+      }
+    }
+  }
+  return false;
+}
+
+bool updateDashDetection() {
+  if (detectDashPair()) {
+    dashConfidence++;
+    if (dashConfidence >= DASH_CONFIRM_FRAMES) {
+      dashConfidence = DASH_CONFIRM_FRAMES; // clamp — don't overflow
+      if (!dashDetected) {
+        dashDetected = true;
+        dashTime     = millis();
+        Serial.println("[DASH] Pair confirmed!");
+      }
+    }
+  } else {
+    dashConfidence = max(0, dashConfidence - 1); // decay on miss
+    if (dashConfidence == 0) dashDetected = false;
+  }
+  return dashDetected;
+}
 
 static unsigned long lastTime = 0;
 
@@ -287,17 +421,35 @@ void loop() {
   float vx, vy;
   fusedVector(vx, vy); 
   normalizeFusedVector(vx, vy);
-  //Serial.print("Fused vector: vx="); 
-  //Serial.print(vx); 
-  //Serial.print(" vy="); 
-  //Serial.println(vy);
-  //Serial.print("Num vectors: ");
-  //Serial.println(pixy.line.numVectors);
   float px, py;
   lookaheadPoint(vx, vy, px, py);
   float steering = computeSteering(px, dt);
-  steering = constrain(steering, -40.0f, 40.0f);
+  detectLaneSides();
 
+  bool dashSeen = updateDashDetection();
+
+  if (dashSeen) {
+    runMotors(0, 0);
+  }
+
+  // --- Lane balancing correction (FINAL) ---
+  float laneCorrection = 0.0f;
+  float strength = fabsf(vx); // curvature factor
+
+  if(hasRight && !hasLeft)
+  {
+    laneCorrection = -LEFT_GAIN * (0.5f + strength);
+  }
+  else if(hasLeft && !hasRight)
+  {
+    laneCorrection = RIGHT_GAIN * (0.5f + strength);
+  }
+
+  // Apply correction ONCE
+  steering += laneCorrection;
+
+  // THEN constrain
+  steering = constrain(steering, -40.0f, 40.0f);
   if (fabsf(steering) < STEERING_DEADBAND)
       steering = 0.0f;
 
@@ -330,9 +482,9 @@ void loop() {
   servo.write((int)filteredServo);
   float turnFactor = fabsf(steering) / 50.0f; // normalize 0 → 1
 
-  int speed = MOTOR_SPEED * (1.0f - 0.5f * turnFactor); 
+  int speed = MOTOR_SPEED * (1.0f - 0.6f * turnFactor); 
 
-  speed = constrain(speed, 160, MOTOR_SPEED);
+  speed = constrain(speed, 180, MOTOR_SPEED);
 
   runMotors(speed, speed);
   if(millis()-startTime>10000){
