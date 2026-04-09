@@ -18,7 +18,7 @@ Servo servo;
 //ratio = frameWidth / frameHeight = 78 / 51 ≈ 1.53
 //This means 1 pixel of height = 1.53 pixels of width in real-world distance.
 #define SCALE_Y(y)        ((y) * 1.53f)
-#define KP                0.25f
+#define KP                0.28f
 #define KI                0.0f    
 #define KD                0.05f 
 #define SERVO_CENTER      90
@@ -29,32 +29,32 @@ Servo servo;
 #define L_MIN             0.15f     // short lookahead in tight turns (reactive)
 #define L_MAX             0.85f     // long lookahead on straights (smooth)
 // Vector filtering
-#define MIN_VECTOR_LEN    10.0f    // ignore very short noise vectors
+#define MIN_VECTOR_LEN    11.0f    // ignore very short noise vectors
 #define MAX_VECTOR_LEN    110.0f   // cap max vector length to avoid outliers dominating
 #define MIN_VECTOR_ANGLE  5.0f     // ignore near-horizontal vectors (deg)
 
 #define STEERING_DEADBAND  4.0f   // degrees — ignore corrections smaller than this
 #define MAX_SERVO_STEP    50.0f    // max degrees servo can move per cycle
 
-#define CONTROL_PERIOD_MS 40
+#define CONTROL_PERIOD_MS 30
 
-#define MOTOR_SPEED 230
+#define MOTOR_SPEED 190
 #define SERVO_FILTER_SIZE 5
 
 // --- Lane balancing ---
-#define LEFT_GAIN   15.0f   // how strong correction when only right line is seen
-#define RIGHT_GAIN  15.0f   // how strong correction when only left line is seen
+#define LEFT_GAIN   15.50f   // how strong correction when only right line is seen
+#define RIGHT_GAIN  16.70f   // how strong correction when only left line is seen
 
-#define DASH_MAX_LEN        28.0f   // dashes are SHORT — tune to your track
-#define DASH_MIN_LEN         5.0f   // ignore pure noise
-#define DASH_CENTER_MARGIN  20      // dash x must be inside lane center zone
+#define DASH_MAX_LEN        18.0f   // dashes are SHORT — tune to your track
+#define DASH_MIN_LEN         3.0f   // ignore pure noise
+#define DASH_CENTER_MARGIN  19      // dash x must be inside lane center zone
 #define DASH_ANGLE_THRESH   30.0f   // near-horizontal, same as isNinetyDegree
-#define DASH_Y_PROXIMITY    18      // two dashes must be within this many px vertically
+#define DASH_Y_PROXIMITY    20     // two dashes must be within this many px vertically
 #define DASH_CONFIRM_FRAMES  2      // debounce: must see dashes N consecutive frames
 
 bool hasLeft  = false;
 bool hasRight = false;
-
+bool ishorizontal = false;
 float servoBuffer[SERVO_FILTER_SIZE];
 int servoIndex = 0;
 bool bufferFilled = false;
@@ -188,7 +188,11 @@ bool validVector(int i)
   float dy = SCALE_Y(pixy.line.vectors[i].m_y1) - SCALE_Y(pixy.line.vectors[i].m_y0);
 
   float length = sqrtf(dx*dx + dy*dy);
-
+  if(pixy.line.vectors[i].m_y0 <15 || pixy.line.vectors[i].m_y1 >pixy.frameHeight-30) return false; // ignore vectors too close to top or bottom (noise)
+  if(pixy.line.vectors[i].m_x0 < 12 && pixy.line.vectors[i].m_x1 < 12)
+    return false; // ignore vectors pointing up (noise)
+  if(pixy.line.vectors[i].m_x0 > pixy.frameWidth-12 && pixy.line.vectors[i].m_x1 > pixy.frameWidth-12)
+    return false; // ignore vectors pointing up (noise)
   if(length < MIN_VECTOR_LEN)
     return false;
   if(length > MAX_VECTOR_LEN)
@@ -372,7 +376,7 @@ bool detectDashPair() {
     }
   }
 
-  if (count < 4) return false;  // need at least two
+  if (count < 1) return false;  
 
   for (int a = 0; a < count; a++) {
     for (int b = a + 1; b < count; b++) {
@@ -390,18 +394,58 @@ bool updateDashDetection() {
   if (detectDashPair()) {
     dashConfidence++;
     if (dashConfidence >= DASH_CONFIRM_FRAMES) {
-      dashConfidence = DASH_CONFIRM_FRAMES; // clamp — don't overflow
       if (!dashDetected) {
         dashDetected = true;
         dashTime     = millis();
-        Serial.println("[DASH] Pair confirmed!");
       }
     }
   } else {
-    dashConfidence = max(0, dashConfidence - 1); // decay on miss
+    dashConfidence = max(0, dashConfidence - 1);
     if (dashConfidence == 0) dashDetected = false;
   }
   return dashDetected;
+}
+
+bool isWideHorizontal(int i)
+{
+  float dx = pixy.line.vectors[i].m_x1 - pixy.line.vectors[i].m_x0;
+  float dy = SCALE_Y(pixy.line.vectors[i].m_y1) - SCALE_Y(pixy.line.vectors[i].m_y0);
+
+  float length = sqrtf(dx*dx + dy*dy);
+
+  // Must be horizontal
+  if (!isNinetyDegree(i))
+    return false;
+
+  // Must be LONG (not a dash)
+  if (length < 25.0f)   // tune: 20–35
+    return false;
+
+  // Must be near bottom of frame (close to robot)
+  if (pixy.line.vectors[i].m_y0 < pixy.frameHeight * 0.6f)
+    return false;
+
+  return true;
+}
+
+bool detectFinishLine()
+{
+  bool horizontalFound = false;
+
+  for (int i = 0; i < pixy.line.numVectors; i++)
+  {
+    if (isWideHorizontal(i))
+    {
+      horizontalFound = true;
+      break;
+    }
+  }
+  if (horizontalFound && (hasLeft || hasRight) && dashDetected)
+  {
+    return true;
+  }
+
+  return false;
 }
 
 static unsigned long lastTime = 0;
@@ -426,13 +470,19 @@ void loop() {
   float steering = computeSteering(px, dt);
   detectLaneSides();
 
-  bool dashSeen = updateDashDetection();
+  // Step 2: update dash detection
+  /*updateDashDetection();
 
-  if (dashSeen) {
+  // Step 3: check finish line
+  if (detectFinishLine())
+  {
     runMotors(0, 0);
-  }
+    servo.write(SERVO_CENTER);
 
-  // --- Lane balancing correction (FINAL) ---
+    Serial.println("FINISH LINE DETECTED");
+
+    while (1);
+  }*/
   float laneCorrection = 0.0f;
   float strength = fabsf(vx); // curvature factor
 
@@ -487,7 +537,9 @@ void loop() {
   speed = constrain(speed, 180, MOTOR_SPEED);
 
   runMotors(speed, speed);
-  if(millis()-startTime>10000){
+  if(millis()-startTime>13000){
+    speed=110;
+    runMotors(speed, speed);
     float distance = readUltrasonic();
     if (distance > 15 && distance < 30){
       runMotors(0, 0);
