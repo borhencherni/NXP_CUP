@@ -128,6 +128,10 @@ These references are useful for assembly, servicing, and mechanical debugging.
 
 ![Robot photo](image%20robot.jpg)
 
+### Mechanical Design
+
+![Mechanical design](Mechanical%20design%20of%20the%20robot.png)
+
 ## Electrical Part ⚡
 
 The electrical part covers the wiring, PCB layout, power distribution, and interface hardware.
