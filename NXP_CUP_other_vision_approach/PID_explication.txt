@@ -1,0 +1,365 @@
+=============================================================================
+  FROM PID OUTPUT TO STEERING ANGLE — COMPLETE EXPLANATION
+=============================================================================
+
+
+-----------------------------------------------------------------------------
+  PART 1 — WHAT IS A PID CONTROLLER ?
+-----------------------------------------------------------------------------
+
+PID stands for Proportional, Integral, Derivative. It is a control algorithm
+that answers one question:
+
+    "I want to be at position X. I am currently at position Y.
+     How hard should I correct to get there?"
+
+The difference between where you want to be and where you are is called
+the ERROR:
+
+    error = target - current
+
+The PID controller looks at this error in three different ways and adds
+them together to produce an OUTPUT — a correction signal.
+
+    output = P + I + D
+
+Let's understand each term.
+
+
+-----------------------------------------------------------------------------
+  PART 2 — THE THREE TERMS
+-----------------------------------------------------------------------------
+
+  ── P (Proportional) ──────────────────────────────────────────────────────
+
+  The P term reacts to the CURRENT error.
+  The bigger the error right now, the bigger the correction.
+
+      P = KP × error
+
+  Example:
+      error  = 17.6 pixels   (target point is 17.6 pixels to the right)
+      KP     = 0.8
+      P      = 0.8 × 17.6 = 14.1 pixels
+
+  KP is a tuning constant (dimensionless). You choose it.
+  Big KP → aggressive reaction.
+  Small KP → gentle reaction.
+
+  Problem with P alone:
+  If you only use P, the car will always be slightly off-center. It only
+  corrects when there IS an error — so it never fully eliminates a small
+  persistent offset. This is called "steady state error".
+
+
+  ── I (Integral) ──────────────────────────────────────────────────────────
+
+  The I term reacts to the ACCUMULATED error over time.
+  It adds up all the errors from every previous loop iteration.
+
+      integralError += error × dt
+      I = KI × integralError
+
+  Where dt = time elapsed since last loop iteration (in seconds).
+
+  Why accumulate?
+  If the car is slightly to the left of center for a long time, the
+  integral keeps growing. Eventually it becomes large enough to push the
+  car back to center even when the current error is small.
+
+  Units:
+      error       = pixels
+      dt          = seconds
+      integralError = pixels × seconds   (sum of error × time)
+      KI          = 1/seconds            (to cancel out the seconds)
+      I           = KI × integralError
+                  = (1/seconds) × (pixels × seconds)
+                  = pixels               ✓ same unit as P
+
+  Windup protection:
+  If the car loses the line for a few seconds, the integralError can
+  grow enormously. When the line is found again, this huge accumulated
+  value would cause a violent overcorrection. To prevent this, the
+  integral is clamped:
+
+      integralError = constrain(integralError, -I_MAX, I_MAX)
+
+  This means the integral can never exceed ±I_MAX, no matter how long
+  the error persists.
+
+
+  ── D (Derivative) ────────────────────────────────────────────────────────
+
+  The D term reacts to HOW FAST the error is changing.
+  It anticipates where the error is going, not where it is now.
+
+      D = KD × (error - lastError) / dt
+
+  (error - lastError) is how much the error changed since last iteration.
+  Dividing by dt gives the rate of change (pixels per second).
+
+  Why use D?
+  If the error is large but shrinking fast, the D term will resist
+  overcorrection. It acts like a brake — damping the response.
+
+  If the error is small but growing fast, D will react early before
+  the error becomes large.
+
+  Units:
+      (error - lastError) = pixels
+      dt                  = seconds
+      (error - lastError) / dt = pixels/second
+      KD                  = seconds
+      D = KD × (pixels/second) = pixels   ✓ same unit as P and I
+
+
+  ── Summary of units ──────────────────────────────────────────────────────
+
+  All three terms P, I, D are in PIXELS.
+  This is important — they can only be added together because they share
+  the same unit. You cannot add apples and oranges.
+
+      P = pixels
+      I = pixels
+      D = pixels
+      ─────────────────
+      output = P + I + D = pixels
+
+
+-----------------------------------------------------------------------------
+  PART 3 — WHAT IS "output" EXACTLY IN OUR CODE ?
+-----------------------------------------------------------------------------
+
+In our specific code, KI = 0 and KD = 0. This means:
+
+    I = 0 × integralError = 0
+    D = 0 × (...) / dt    = 0
+
+    output = P + 0 + 0 = P = KP × error = 0.8 × error
+
+So right now output is simply:
+
+    output = 0.8 × (px - frameWidth/2)
+           = 0.8 × horizontal distance in pixels from target to frame center
+
+Concretely:
+    px     = 56.6 pixels  (target point computed by lookahead)
+    center = 39.0 pixels  (frameWidth/2 = 78/2 = 39)
+    error  = 56.6 - 39.0 = 17.6 pixels
+    output = 0.8 × 17.6  = 14.1 pixels
+
+output is "how many pixels we need to correct horizontally, scaled by KP".
+
+Even if KI and KD were non-zero, output would STILL be in pixels because
+all three terms are in pixels, and adding pixels + pixels + pixels = pixels.
+The units of the gains (dimensionless, 1/s, s) are chosen precisely to
+make this work out.
+
+
+-----------------------------------------------------------------------------
+  PART 4 — FROM output (pixels) TO A STEERING ANGLE (degrees)
+-----------------------------------------------------------------------------
+
+We have output in pixels. We need a steering angle in degrees.
+The conversion is done by this line:
+
+    return atan2f(output, 40.0f) * 180.0f / PI;
+
+Let's break this into three sub-steps.
+
+
+  ── Sub-step 1 : Building an imaginary triangle ───────────────────────────
+
+  atan2f(y, x) is the arctangent function. It takes two numbers and
+  returns the angle θ of the point (x, y) relative to the origin.
+
+  We call it with:
+      y = output  (horizontal pixel error)
+      x = 40.0f   (a fixed invented number, more on this below)
+
+  This creates an imaginary right triangle:
+
+                    * point(40, output)
+                   /|
+                  / |
+                 /  | output pixels  (horizontal error — the real quantity)
+                /   |
+               / θ  |
+              *─────*
+                 40 pixels  (invented forward distance)
+
+  θ = atan2f(output, 40.0f)
+
+  θ is the angle of this triangle in radians.
+
+
+  ── Sub-step 2 : What is 40.0f and why not use py ? ──────────────────────
+
+  Geometrically, the "correct" denominator would be py — the actual
+  vertical distance to the target point in the frame. This would make
+  the triangle physically meaningful:
+
+      atan2f(output, py)
+
+  But this is NOT done for three reasons:
+
+  Reason 1 — py changes every frame.
+      py depends on L, vy, and the current line detection. It fluctuates
+      constantly. Using it as the denominator means the sensitivity of
+      the steering changes every loop iteration.
+
+      Example of instability:
+          frame 1: py = 14.6  → atan2f(17.6, 14.6) = 50.3°  very aggressive
+          frame 2: py = 28.0  → atan2f(17.6, 28.0) = 32.1°  moderate
+          frame 3: py = 8.0   → atan2f(17.6,  8.0) = 65.5°  dangerously aggressive
+
+      The steering sensitivity would be jumping around — unpredictable
+      and very hard to tune.
+
+  Reason 2 — py can be zero or near zero.
+      If vy is zero (line going perfectly horizontal), py = frameHeight.
+      In extreme cases py could be very small, causing a near-division
+      by zero and sending the angle to 90° — maximum steering, instantly.
+
+  Reason 3 — 40 gives stable, consistent behavior.
+      With a fixed 40:
+          frame 1: atan2f(17.6, 40) = 23.8°   stable
+          frame 2: atan2f(17.6, 40) = 23.8°   same
+          frame 3: atan2f(17.6, 40) = 23.8°   same
+
+      The sensitivity is constant — easy to tune, predictable.
+
+  So 40.0f is not a physical distance. It is a TUNING CONSTANT — like a
+  gain — that controls how aggressively pixel error converts to degrees.
+
+  The larger 40 is, the less sensitive the steering:
+      atan2f(17.6, 20)  = 41.4°   very aggressive
+      atan2f(17.6, 40)  = 23.8°   moderate
+      atan2f(17.6, 80)  = 12.4°   very gentle
+
+  It is essentially an INVERSE GAIN. Compare:
+      KP = 0.8   multiplies error UP   (amplifies)
+      40         divides error DOWN    (attenuates)
+
+  The combined effective gain is approximately:
+      effective gain ≈ KP / 40 = 0.8 / 40 = 0.02 degrees per pixel
+
+
+  ── Sub-step 3 : Converting radians to degrees ────────────────────────────
+
+  atan2f returns an angle in RADIANS. But we want degrees.
+
+  What are radians?
+  A radian is another unit for measuring angles. One full circle is:
+      360 degrees = 2π radians
+
+  So to convert:
+      degrees = radians × (180 / π)
+
+  Where π ≈ 3.14159.
+
+  Example:
+      atan2f(14.1, 40.0) = 0.338 radians
+      0.338 × (180 / 3.14159) = 0.338 × 57.296 = 19.4°
+
+  So the full line:
+      atan2f(output, 40.0f) * 180.0f / PI
+      = 0.338 radians × 57.296
+      = 19.4 degrees
+
+
+  ── Why atan2f instead of a simple division ? ─────────────────────────────
+
+  A simpler approach would be:
+      return (output / 40.0f);   linear, directly proportional
+
+  The difference is that atan2f provides SOFT SATURATION.
+
+  With simple division (output / 40):
+      output = 40  → angle = 1.0  (some unit)
+      output = 400 → angle = 10.0 (keeps growing forever, unbounded)
+
+  With atan2f:
+      output = 40   → angle = 45°
+      output = 400  → angle = 84°  (approaching 90° but never reaching it)
+      output = 4000 → angle = 89°  (almost 90° — saturated)
+
+  As output grows very large, the angle asymptotically approaches 90°
+  and stops growing. This is called soft saturation — the output is
+  naturally bounded without any hard clamp.
+
+  Graph:
+      simple division:    ──────────/  (grows forever, linear)
+      atan2f:             ──────/‾‾‾  (flattens out near 90°)
+
+  In practice the angle is ALSO hard-clamped afterward:
+      steering = constrain(steering, -20.0f, 20.0f)
+
+  So the soft saturation of atan2f is a secondary protection on top of
+  the hard clamp.
+
+
+-----------------------------------------------------------------------------
+  PART 5 — FULL WORKED EXAMPLE END TO END
+-----------------------------------------------------------------------------
+
+Given:
+    px     = 56.6 pixels   (target point, from lookahead pipeline)
+    KP     = 0.8
+    KI     = 0.0
+    KD     = 0.0
+    dt     = 0.02 seconds  (50 Hz loop)
+
+Step 1 — compute error:
+    error = px - frameWidth/2
+          = 56.6 - 39.0
+          = 17.6 pixels
+
+Step 2 — compute P term:
+    P = KP × error
+      = 0.8 × 17.6
+      = 14.1 pixels
+
+Step 3 — compute I term:
+    integralError += 17.6 × 0.02 = 0.352 pixel·seconds
+    I = KI × integralError = 0.0 × 0.352 = 0 pixels
+
+Step 4 — compute D term:
+    assume lastError = 16.0 pixels
+    D = KD × (17.6 - 16.0) / 0.02
+      = 0.0 × 80.0
+      = 0 pixels
+
+Step 5 — compute output:
+    output = P + I + D
+           = 14.1 + 0 + 0
+           = 14.1 pixels
+
+Step 6 — convert to angle:
+    angle = atan2f(14.1, 40.0) × 180 / π
+          = 0.338 radians × 57.296
+          = 19.4°
+
+Step 7 — clamp:
+    steering = constrain(19.4, -20.0, 20.0)
+             = 19.4°   (within range, no clamping needed)
+
+Step 8 — apply low pass filter:
+    filteredSteering = 0.7 × filteredSteering + 0.3 × 19.4
+    (smooths out rapid changes between frames)
+
+Step 9 — send to servo:
+    servoAngle = 90 + filteredSteering
+               = 90 + 19.4
+               = 109.4°   → servo turns right
+
+
+-----------------------------------------------------------------------------
+  PART 6 — SUMMARY TABLE
+-----------------------------------------------------------------------------
+
+  Variable         Unit            Meaning
+  ───────────────────────────────────────────────────────────────────────
+  error            pixels          horizontal distance from target to center
+  P                pixels          proportional correction
+  I                pixels          accumulated correction over time
